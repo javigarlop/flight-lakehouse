@@ -1,0 +1,28 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+build/
+dist/
+
+# Tooling
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Spark and local data
+spark-warehouse/
+checkpoints/
+metastore_db/
+derby.log
+/data/
+
+# OS and editors
+.DS_Store
+.idea/
+.vscode/

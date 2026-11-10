@@ -55,7 +55,7 @@ flowchart LR
 | Language and packaging | Python 3.12, `uv` | Same tooling as my other projects |
 | Ingestion | Apache Kafka (KRaft mode), Avro, Apicurio Registry | Kafka is the top streaming keyword; the registry shows schema contracts |
 | Processing | Spark Structured Streaming (PySpark) | Spark is the most requested skill I lack |
-| Storage | Apache Iceberg on S3-compatible object storage | The open table format most engines support |
+| Storage | Apache Iceberg on SeaweedFS (S3 API) | The open table format most engines support; SeaweedFS is Apache-licensed and maintained ([decision](docs/decisions/0001-object-store.md)) |
 | Catalog | Apache Polaris (Iceberg REST) | Vendor-neutral, and links to my Snowflake experience |
 | Query and transform | Trino with dbt (`dbt-trino`) | Reuses my dbt strength on a new engine |
 | Orchestration | Airflow 3 | Compaction, snapshot expiry, backfills and dbt runs |
@@ -96,12 +96,12 @@ flight-lakehouse/
 
 ## Data source
 
-Verify terms of use, attribution requirements and rate limits before building the producer.
+**Decided: adsb.lol** as the primary source, with OpenSky as an optional second producer ([decision record](docs/decisions/0002-data-source.md)). Data is under ODbL: attribute adsb.lol in the README and keep committed recordings under ODbL.
 
 | Source | Notes |
 |---|---|
-| OpenSky Network | Live state vectors over REST. Has rate limits and research-oriented terms; check both |
-| adsb.lol | Community ADS-B data under an open licence; check the current API and limits |
+| OpenSky Network | Optional second producer. OAuth2, 4,000 credits per day, research-oriented terms |
+| adsb.lol | **Chosen.** Community ADS-B data under ODbL, no account needed today, dynamic rate limits, yearly history dumps for replay |
 | Wikimedia EventStreams | Fallback if neither aviation source fits. Reliable public stream, different domain |
 
 The replay tool removes the dependency on a live API: record a few hours once, then replay deterministically for tests, demos and benchmarks.
@@ -141,10 +141,10 @@ Each phase is roughly a weekend or two and ends with something that works on its
 
 ### Phase 0: Decisions and skeleton
 
-- [ ] Confirm the data source: terms, limits, attribution
-- [ ] Choose the object store (see Open decisions)
-- [ ] Repo skeleton with `uv`, `ruff`, `pytest` and the CI workflow
-- [ ] Compose stack: Kafka, schema registry, object storage, Polaris
+- [x] Confirm the data source: adsb.lol ([decision record](docs/decisions/0002-data-source.md))
+- [x] Choose the object store: SeaweedFS ([decision record](docs/decisions/0001-object-store.md))
+- [x] Repo skeleton with `uv`, `ruff`, `pytest` and the CI workflow
+- [ ] Compose stack: Kafka, schema registry, SeaweedFS, Polaris
 
 **Done when:** `make up` starts the stack and a smoke test creates and reads an Iceberg table.
 
@@ -202,8 +202,8 @@ Each phase is roughly a weekend or two and ends with something that works on its
 
 | Decision | Options | Leaning |
 |---|---|---|
-| Data source | OpenSky, adsb.lol, Wikimedia EventStreams | Aviation if terms and limits allow |
-| Object store | MinIO, SeaweedFS, Garage | Check MinIO's community edition status first |
+| Data source | OpenSky, adsb.lol, Wikimedia EventStreams | **Decided: adsb.lol** ([0002](docs/decisions/0002-data-source.md)) |
+| Object store | MinIO, SeaweedFS, Garage | **Decided: SeaweedFS** ([0001](docs/decisions/0001-object-store.md)) |
 | Dashboard | Superset, Evidence | Evidence is lighter; Superset is better known |
 | Repo visibility | Private first, public later | Public once Phase 1 works |
 | Optional Kubernetes | kind with Terraform, or skip | Only after Phase 5 |
