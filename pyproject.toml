@@ -11,6 +11,7 @@ flight-lakehouse = "flight_lakehouse.cli:main"
 
 [dependency-groups]
 dev = [
+    "pyiceberg[pyarrow]>=0.9",
     "pytest>=8",
     "ruff>=0.6",
 ]

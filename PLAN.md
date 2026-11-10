@@ -144,7 +144,7 @@ Each phase is roughly a weekend or two and ends with something that works on its
 - [x] Confirm the data source: adsb.lol ([decision record](docs/decisions/0002-data-source.md))
 - [x] Choose the object store: SeaweedFS ([decision record](docs/decisions/0001-object-store.md))
 - [x] Repo skeleton with `uv`, `ruff`, `pytest` and the CI workflow
-- [ ] Compose stack: Kafka, schema registry, SeaweedFS, Polaris
+- [x] Compose stack: Kafka, schema registry, SeaweedFS, Polaris
 
 **Done when:** `make up` starts the stack and a smoke test creates and reads an Iceberg table.
 

@@ -12,7 +12,10 @@ Requires Python 3.12, [uv](https://docs.astral.sh/uv/) and Docker.
 make install   # install dependencies
 make test      # run unit tests
 make lint      # ruff checks
-make up        # start the local stack (Phase 0, in progress)
+make up        # start Kafka, Apicurio, SeaweedFS and Polaris
+make smoke     # create, write and read an Iceberg table on the stack
+make up-ui     # also start the web UIs (Kafka, schema registry, SeaweedFS)
+make down      # stop the stack (data is kept in Docker volumes)
 ```
 
 ## Data and attribution
