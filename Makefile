@@ -2,7 +2,7 @@
 -include .env
 COMPOSE := docker compose -f infra/compose/docker-compose.yml --env-file .env
 
-.PHONY: help install lint format test smoke test-stream up up-ui down logs setup produce replay spark-build stream stream-logs stream-stop
+.PHONY: help install lint format test cov audit check smoke test-stream up up-ui down logs setup produce replay spark-build stream stream-logs stream-stop
 
 help: ## Show available targets
 	@grep -E '^[a-z-]+:.*## ' $(firstword $(MAKEFILE_LIST)) | awk -F':.*## ' '{printf "  %-10s %s\n", $$1, $$2}'
@@ -13,6 +13,7 @@ install: ## Install dependencies with uv
 lint: ## Check code style and lint rules
 	uv run ruff check .
 	uv run ruff format --check .
+	uv run mypy
 
 format: ## Apply formatting and safe lint fixes
 	uv run ruff check --fix .
@@ -20,6 +21,15 @@ format: ## Apply formatting and safe lint fixes
 
 test: ## Run unit tests
 	uv run pytest
+
+cov: ## Run unit tests with a coverage report
+	uv run pytest --cov
+
+audit: ## Check dependencies for known vulnerabilities and the repo for secrets
+	uv export --format requirements-txt --no-emit-project --no-dev -q | uvx pip-audit -r /dev/stdin --disable-pip --require-hashes
+	gitleaks git --no-banner .
+
+check: lint cov audit ## Run every quality check CI runs (except Dockerfile lint)
 
 smoke: .env ## Run the integration tests against the running stack (not Spark)
 	uv run --env-file .env pytest -m "integration and not spark"
