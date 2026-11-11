@@ -1,5 +1,8 @@
 #!/bin/sh
 # Create the Iceberg catalog in Polaris, backed by the SeaweedFS bucket. Safe to re-run.
+# Only endpointInternal (Polaris's own access) is set: with a client-facing "endpoint",
+# Polaris would push one S3 address to every client, but Spark in Docker and tools on
+# the host reach SeaweedFS at different addresses, so each client configures its own.
 set -eu
 
 POLARIS=http://polaris:8181
@@ -28,7 +31,6 @@ status=$(curl -s -o /tmp/response -w '%{http_code}' "$POLARIS/api/management/v1/
     "storageConfigInfo": {
       "storageType": "S3",
       "allowedLocations": ["s3://$S3_BUCKET/"],
-      "endpoint": "http://localhost:$S3_HOST_PORT",
       "endpointInternal": "http://seaweedfs:8333",
       "pathStyleAccess": true,
       "stsUnavailable": true

@@ -7,6 +7,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol
 
+import httpx
+
 from flight_lakehouse.producer.adsblol import RateLimit, RateLimited
 from flight_lakehouse.producer.positions import to_positions
 
@@ -62,6 +64,11 @@ def run(
         except RateLimited as exc:
             log.warning("%s", exc)
             sleep(max(exc.retry_after_s, interval_s))
+            continue
+        except httpx.HTTPError as exc:
+            # Network blips and server errors: skip this poll rather than crash.
+            log.warning("poll failed, retrying in %.0f s: %r", interval_s, exc)
+            sleep(interval_s)
             continue
 
         done += 1

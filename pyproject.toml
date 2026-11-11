@@ -38,4 +38,5 @@ testpaths = ["tests"]
 addopts = "-ra --strict-markers -m 'not integration'"
 markers = [
     "integration: needs the Compose stack running (make up)",
+    "spark: runs Spark jobs in Docker; slow (make test-stream)",
 ]

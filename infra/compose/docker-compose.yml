@@ -1,4 +1,5 @@
-# Phase 0 stack: Kafka, Apicurio Registry, SeaweedFS (S3) and Polaris (Iceberg REST catalog).
+# Local stack: Kafka, Apicurio Registry, SeaweedFS (S3) and Polaris (Iceberg REST catalog,
+# with its state in Postgres so tables survive restarts).
 # Start with `make up` from the repo root; credentials come from .env.
 
 name: flight-lakehouse
@@ -89,12 +90,48 @@ services:
         grep -qE "created bucket|already exists" /tmp/out
     restart: "no"
 
+  # Polaris keeps its catalog state (catalogs, namespaces, tables, principals) here.
+  postgres:
+    image: postgres:17.11-alpine
+    environment:
+      POSTGRES_DB: polaris
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d polaris"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Creates Polaris's tables and the root principal on first start.
+  polaris-bootstrap:
+    image: apache/polaris-admin-tool:1.8.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment: &polaris-db
+      POLARIS_PERSISTENCE_TYPE: relational-jdbc
+      QUARKUS_DATASOURCE_JDBC_URL: jdbc:postgresql://postgres:5432/polaris
+      QUARKUS_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      QUARKUS_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+    command:
+      - bootstrap
+      - --realm=POLARIS
+      - --credential=POLARIS,${POLARIS_CLIENT_ID},${POLARIS_CLIENT_SECRET}
+    restart: "no"
+
   polaris:
     image: apache/polaris:1.8.0
+    depends_on:
+      polaris-bootstrap:
+        condition: service_completed_successfully
     ports:
       - "127.0.0.1:${POLARIS_HOST_PORT:-8181}:8181"
     environment:
-      POLARIS_BOOTSTRAP_CREDENTIALS: POLARIS,${POLARIS_CLIENT_ID},${POLARIS_CLIENT_SECRET}
+      <<: *polaris-db
       polaris.realm-context.realms: POLARIS
       quarkus.otel.sdk.disabled: "true"
       # Polaris's own credentials for the object store (used when it writes table metadata).
@@ -120,11 +157,69 @@ services:
       POLARIS_CLIENT_SECRET: ${POLARIS_CLIENT_SECRET}
       POLARIS_CATALOG: ${POLARIS_CATALOG}
       S3_BUCKET: ${S3_BUCKET}
-      S3_HOST_PORT: ${S3_HOST_PORT:-8333}
     volumes:
       - ./polaris/init.sh:/init.sh:ro
     entrypoint: ["/bin/sh", "/init.sh"]
     restart: "no"
+
+  # Live ingestion: polls adsb.lol every 4 minutes (360 of the 500 daily requests)
+  # and publishes to Kafka. Raw responses are also saved to data/recordings/.
+  producer:
+    build:
+      context: ../..
+      dockerfile: infra/producer/Dockerfile
+    image: flight-lakehouse-producer:dev
+    profiles: [stream]
+    depends_on:
+      kafka:
+        condition: service_healthy
+      schema-registry:
+        condition: service_started
+    environment:
+      KAFKA_BOOTSTRAP: kafka:9092
+      SCHEMA_REGISTRY_URL: http://schema-registry:8080/apis/ccompat/v7
+      POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-240}
+    volumes:
+      - ../../data/recordings:/app/data/recordings
+    command: ["produce", "--record", "data/recordings/live.jsonl"]
+    restart: unless-stopped
+
+  # Spark streaming jobs: start with `make stream`. Code is mounted, so edits need no rebuild.
+  spark-bronze:
+    build: ../spark
+    image: flight-lakehouse-spark:dev
+    profiles: [stream]
+    ports:
+      # Spark UI: jobs, micro-batch timings, input rate vs processing rate.
+      - "127.0.0.1:${SPARK_UI_HOST_PORT:-4040}:4040"
+    depends_on:
+      kafka:
+        condition: service_healthy
+      polaris:
+        condition: service_healthy
+      seaweedfs:
+        condition: service_healthy
+    environment: &spark-env
+      KAFKA_BOOTSTRAP: kafka:9092
+      POLARIS_URI: http://polaris:8181/api/catalog
+      POLARIS_CATALOG: ${POLARIS_CATALOG}
+      POLARIS_CLIENT_ID: ${POLARIS_CLIENT_ID}
+      POLARIS_CLIENT_SECRET: ${POLARIS_CLIENT_SECRET}
+      S3_ENDPOINT: http://seaweedfs:8333
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      CHECKPOINT_DIR: /checkpoints
+    volumes: &spark-volumes
+      - ../../src:/app/src:ro
+      - ../../schemas:/app/schemas:ro
+      - spark-checkpoints:/checkpoints
+    command:
+      - /opt/spark/bin/spark-submit
+      - --master=local[2]
+      - --driver-memory=1g
+      - --conf=spark.ui.showConsoleProgress=false
+      - src/flight_lakehouse/streaming/bronze.py
+    restart: unless-stopped
 
   # Optional web UIs: start with `make up-ui`.
 
@@ -155,4 +250,6 @@ services:
 
 volumes:
   kafka-data:
+  postgres-data:
+  spark-checkpoints:
   seaweedfs-data:

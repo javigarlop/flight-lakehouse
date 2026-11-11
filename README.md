@@ -12,11 +12,14 @@ Requires Python 3.12, [uv](https://docs.astral.sh/uv/) and Docker.
 make install   # install dependencies
 make test      # run unit tests
 make lint      # ruff checks
-make up        # start Kafka, Apicurio, SeaweedFS and Polaris
+make up        # start Kafka, Apicurio, SeaweedFS, Polaris and its Postgres
 make smoke     # create, write and read an Iceberg table on the stack
 make up-ui     # also start the web UIs (Kafka, schema registry, SeaweedFS)
-make produce   # poll adsb.lol every 4 minutes and publish to Kafka
+make produce   # run the producer in this terminal instead (Ctrl+C to stop)
 make replay    # replay the recorded test data into Kafka
+make stream    # run the pipeline in the background: live producer (every 4 min) + Spark bronze job
+make stream-logs  # follow both; make stream-stop stops them
+make test-stream  # kill-and-restart test for the Spark job (slow, ~1.5 min)
 make down      # stop the stack (data is kept in Docker volumes)
 ```
 

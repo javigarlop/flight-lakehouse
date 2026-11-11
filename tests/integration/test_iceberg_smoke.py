@@ -3,44 +3,19 @@
 Needs the stack running (make up). Run with: make smoke
 """
 
-import os
 import uuid
 
 import pyarrow as pa
 import pytest
 
+from tests.integration.helpers import host_catalog
+
 pytestmark = pytest.mark.integration
-
-
-def env(name: str, default: str) -> str:
-    return os.environ.get(name) or default
 
 
 @pytest.fixture
 def catalog():
-    from pyiceberg.catalog import load_catalog
-
-    client_id = env("POLARIS_CLIENT_ID", "root")
-    client_secret = env("POLARIS_CLIENT_SECRET", "polaris-secret")
-    return load_catalog(
-        "polaris",
-        type="rest",
-        uri=f"http://localhost:{env('POLARIS_HOST_PORT', '8181')}/api/catalog",
-        warehouse=env("POLARIS_CATALOG", "lakehouse"),
-        credential=f"{client_id}:{client_secret}",
-        scope="PRINCIPAL_ROLE:ALL",
-        **{
-            "oauth2-server-uri": f"http://localhost:{env('POLARIS_HOST_PORT', '8181')}"
-            "/api/catalog/v1/oauth/tokens",
-            # Clients bring their own S3 keys; SeaweedFS has no STS for credential vending.
-            "header.X-Iceberg-Access-Delegation": "",
-            "s3.endpoint": f"http://localhost:{env('S3_HOST_PORT', '8333')}",
-            "s3.access-key-id": env("S3_ACCESS_KEY", "lakehouse"),
-            "s3.secret-access-key": env("S3_SECRET_KEY", "lakehouse-secret"),
-            "s3.path-style-access": "true",
-            "s3.region": "us-east-1",
-        },
-    )
+    return host_catalog()
 
 
 def test_create_write_read_table(catalog):
