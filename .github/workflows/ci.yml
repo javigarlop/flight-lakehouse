@@ -50,7 +50,7 @@ jobs:
           uv export --format requirements-txt --no-emit-project --no-dev > requirements.txt
           uvx pip-audit -r requirements.txt --disable-pip --require-hashes
       - name: Scan for committed secrets
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
