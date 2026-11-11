@@ -26,7 +26,7 @@ The pipeline needs a free, live feed of aircraft positions. Because the repo is 
 
 ## Decision
 
-Use **adsb.lol** as the primary source, scoped to one region (for example Spain or Western Europe).
+Use **adsb.lol** as the primary source, scoped to a 100 nm radius around Barcelona airport (LEBL), with 3 days of retention. See the plan's *Scope and retention* section.
 
 - The producer polls one area at a modest interval (about 5 to 10 seconds), backs off on 429 responses and accepts an optional API key from `.env`.
 - Recordings for `tests/fixtures/` and the replay tool come from the live API or the ODbL history dumps, and are committed with attribution.

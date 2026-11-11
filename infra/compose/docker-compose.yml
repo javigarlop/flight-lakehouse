@@ -22,6 +22,8 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_NUM_PARTITIONS: 3
+      # Keep 3 days of events (the plan's retention); Iceberg holds the longer-lived aggregates.
+      KAFKA_LOG_RETENTION_HOURS: 72
     volumes:
       - kafka-data:/var/lib/kafka/data
     healthcheck:

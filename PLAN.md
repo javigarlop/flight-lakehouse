@@ -106,6 +106,27 @@ flight-lakehouse/
 
 The replay tool removes the dependency on a live API: record a few hours once, then replay deterministically for tests, demos and benchmarks.
 
+## Scope and retention
+
+Kept deliberately small so the project stays easy to run and maintain on a laptop.
+
+- **Region:** a 100 nm (about 185 km) radius around Barcelona airport (LEBL, 41.297 N, 2.078 E). It covers Barcelona, Girona and Reus and their approaches.
+- **Polling:** every 10 seconds.
+- **Retention: 3 days** for the raw and cleaned data.
+  - Kafka: `retention.ms` of 72 hours on `flight.positions.v1`.
+  - Bronze and silver: a daily job deletes rows older than 3 days, then expires snapshots and removes orphan files so the storage is actually freed.
+  - Gold: kept, because hourly and daily aggregates are tiny.
+
+**Expected volume** (an estimate to check against real numbers in Phase 1):
+
+| | Per day | Kept (3 days) |
+|---|---|---|
+| Positions | ~1 million (~100–200 aircraft at peak, ~10–15 per second on average) | ~3 million |
+| Kafka (Avro) | ~120 MB | ~400 MB |
+| Iceberg bronze and silver (Parquet) | ~20–40 MB | ~100 MB |
+
+Benchmarks replay recorded data at up to 100x, about 1,000–1,500 events per second, instead of widening the region.
+
 ## Data model
 
 **Kafka topic `flight.positions.v1`** (Avro, keyed by `icao24`)
@@ -116,12 +137,12 @@ The replay tool removes the dependency on a live API: record a few hours once, t
 
 **Bronze `bronze.flight_positions`**
 - Raw events as received, plus Kafka metadata (`topic`, `partition`, `offset`, `ingested_at`)
-- Append-only, partitioned by ingestion day
+- Append-only, partitioned by ingestion day; rows older than 3 days are deleted
 
 **Silver `silver.flight_positions`**
 - Deduplicated on (`icao24`, `event_time`), typed and validated
 - Late data handled with a watermark; invalid rows routed to `silver.rejected_positions` with a reason
-- Partitioned by event day, with a spatial bucket if benchmarks justify it
+- Partitioned by event day; rows older than 3 days are deleted
 
 **Silver `silver.flights`**
 - One row per flight: positions sessionised by aircraft and time gap
@@ -170,10 +191,10 @@ Each phase is roughly a weekend or two and ends with something that works on its
 
 - [ ] Trino connected to the catalog
 - [ ] dbt project: gold models, tests and the airports seed
-- [ ] Airflow DAGs: dbt run, compaction, snapshot expiry, backfill
+- [ ] Airflow DAGs: dbt run, compaction, 3-day retention with snapshot expiry, backfill
 - [ ] Dashboard on the gold tables
 
-**Done when:** a full backfill from bronze reproduces the same gold tables, and the dashboard shows live data.
+**Done when:** a backfill from bronze reproduces the same gold tables for the retained 3 days, and the dashboard shows live data.
 
 ### Phase 4: Reliability evidence
 
