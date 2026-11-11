@@ -56,7 +56,7 @@ flowchart LR
 | Ingestion | Apache Kafka (KRaft mode), Avro, Apicurio Registry | Kafka is the top streaming keyword; the registry shows schema contracts |
 | Processing | Spark Structured Streaming (PySpark) | Spark is the most requested skill I lack |
 | Storage | Apache Iceberg on SeaweedFS (S3 API) | The open table format most engines support; SeaweedFS is Apache-licensed and maintained ([decision](docs/decisions/0001-object-store.md)) |
-| Catalog | Apache Polaris (Iceberg REST) | Vendor-neutral, and links to my Snowflake experience |
+| Catalog | Apache Polaris (Iceberg REST), state in Postgres | Vendor-neutral, and links to my Snowflake experience; Postgres keeps tables across restarts (Polaris's default is in memory) |
 | Query and transform | Trino with dbt (`dbt-trino`) | Reuses my dbt strength on a new engine |
 | Orchestration | Airflow 3 | Compaction, snapshot expiry, backfills and dbt runs |
 | Quality | dbt tests, schema compatibility checks in the registry | Extends my reliability story to streaming |
@@ -185,10 +185,10 @@ Each phase is roughly a weekend or two and ends with something that works on its
 
 ### Phase 2: Streaming to Iceberg
 
-- [ ] Spark job writing bronze with checkpointing
+- [x] Spark job writing bronze with checkpointing
 - [ ] Silver job: deduplication, watermark for late data, rejected-rows table
 - [ ] Flight sessionisation into `silver.flights`
-- [ ] Failure test: kill and restart the job mid-stream
+- [ ] Failure test: kill and restart the job mid-stream (bronze passes; silver to do)
 
 **Done when:** after a kill and restart, silver has no lost and no duplicated events compared with the recording.
 

@@ -1,3 +1,5 @@
+import httpx
+
 from flight_lakehouse.producer.adsblol import RateLimit, RateLimited
 from flight_lakehouse.producer.run import RESERVE_REQUESTS, next_wait, run
 from flight_lakehouse.replay.replay import read_recording
@@ -72,4 +74,14 @@ def test_run_backs_off_when_rate_limited(recording, publisher):
     run(source, publisher, **AREA, interval_s=240, polls=1, sleep=sleeps.append)
     assert source.calls == 2
     assert sleeps == [600]
+    assert len(publisher.batches) == 1
+
+
+def test_run_survives_network_errors(recording, publisher):
+    response = next(read_recording(recording))
+    source = FakeSource([httpx.ConnectTimeout("handshake timed out"), response])
+    sleeps: list[float] = []
+    run(source, publisher, **AREA, interval_s=240, polls=1, sleep=sleeps.append)
+    assert source.calls == 2
+    assert sleeps == [240]
     assert len(publisher.batches) == 1
