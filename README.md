@@ -15,6 +15,8 @@ make lint      # ruff checks
 make up        # start Kafka, Apicurio, SeaweedFS and Polaris
 make smoke     # create, write and read an Iceberg table on the stack
 make up-ui     # also start the web UIs (Kafka, schema registry, SeaweedFS)
+make produce   # poll adsb.lol every 4 minutes and publish to Kafka
+make replay    # replay the recorded test data into Kafka
 make down      # stop the stack (data is kept in Docker volumes)
 ```
 

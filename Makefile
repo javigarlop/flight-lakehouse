@@ -2,7 +2,7 @@
 -include .env
 COMPOSE := docker compose -f infra/compose/docker-compose.yml --env-file .env
 
-.PHONY: help install lint format test smoke up up-ui down logs
+.PHONY: help install lint format test smoke up up-ui down logs setup produce replay
 
 help: ## Show available targets
 	@grep -E '^[a-z-]+:.*## ' $(firstword $(MAKEFILE_LIST)) | awk -F':.*## ' '{printf "  %-10s %s\n", $$1, $$2}'
@@ -27,6 +27,16 @@ smoke: .env ## Run the Iceberg smoke test against the running stack
 up: .env ## Start the local stack and wait until it is ready
 	$(COMPOSE) up -d --wait kafka schema-registry seaweedfs polaris
 	$(COMPOSE) run --rm polaris-init
+	$(MAKE) --no-print-directory setup
+
+setup: .env ## Create the Kafka topic and register the Avro schema
+	uv run --env-file .env flight-lakehouse setup
+
+produce: .env ## Poll adsb.lol every 4 minutes and publish to Kafka (Ctrl+C to stop)
+	uv run --env-file .env flight-lakehouse produce --record data/recordings/live.jsonl
+
+replay: .env ## Replay the test recording into Kafka at max speed
+	uv run --env-file .env flight-lakehouse replay tests/fixtures/adsblol_bcn_100nm.jsonl --max
 
 up-ui: up ## Start the stack plus the web UIs
 	$(COMPOSE) --profile ui up -d kafka-ui registry-ui
