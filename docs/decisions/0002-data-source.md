@@ -12,7 +12,7 @@ The pipeline needs a free, live feed of aircraft positions. Because the repo is 
 **adsb.lol.** Community-fed ADS-B data.
 - **Licence:** the data is under ODbL, which allows use and redistribution with attribution, share-alike for derived databases. The API code is BSD-3-Clause.
 - **Access:** no account is needed today. A feeder-only API key has been announced for the future.
-- **Limits:** rate limits are dynamic and depend on load.
+- **Limits:** the README calls them dynamic. A test call on 2026-11-10 returned `x-ratelimit-limit: 500, 500;w=86400`, which is 500 requests per day, with a fixed daily reset.
 - **Coverage:** you query by area (point plus radius), which suits a single region.
 - **History:** yearly history dumps are published on GitHub under ODbL. The 2026 dump is 652 GiB.
 
@@ -28,7 +28,7 @@ The pipeline needs a free, live feed of aircraft positions. Because the repo is 
 
 Use **adsb.lol** as the primary source, scoped to a 100 nm radius around Barcelona airport (LEBL), with 3 days of retention. See the plan's *Scope and retention* section.
 
-- The producer polls one area at a modest interval (about 5 to 10 seconds), backs off on 429 responses and accepts an optional API key from `.env`.
+- The producer polls the area every 4 minutes (360 requests a day, under the 500 limit), reads the rate-limit headers, backs off on 429 responses and accepts an optional API key from `.env`.
 - Recordings for `tests/fixtures/` and the replay tool come from the live API or the ODbL history dumps, and are committed with attribution.
 - OpenSky stays an optional second producer, publishing to the same Avro schema.
 
@@ -36,14 +36,15 @@ Use **adsb.lol** as the primary source, scoped to a 100 nm radius around Barcelo
 
 - CI and anyone who clones the repo can run without credentials.
 - Recorded data can live in the public repo legally. The README must credit adsb.lol and state that the data and derived tables are under ODbL.
+- Live data is coarse: one position per aircraft every 4 minutes. Fine-grained analysis such as holding patterns, and the benchmarks, use replayed recordings and history dumps instead.
 - Rate limits are not guaranteed. The replay tool keeps tests, demos and benchmarks independent of the live API.
-- A single region limits the scale of live data. The benchmark uses replay at up to 100x instead.
+- A single region limits the scale of live data. The benchmark uses max-speed replay instead.
 - If a feeder-only key becomes mandatory, the live producer may need OpenSky or a feeder setup, but replay keeps working.
 
 ## To verify before Phase 1
 
 - The current terms and attribution wording on adsb.lol.
-- The maximum query radius and the current rate-limit behaviour.
+- The maximum query radius, and whether the 500-per-day limit is per IP address.
 - Whether the API key requirement is in effect.
 
 ## References

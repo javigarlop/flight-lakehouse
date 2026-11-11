@@ -22,7 +22,7 @@ A real-time lakehouse that ingests live aircraft position data from open ADS-B f
 |---|---|
 | No Spark, Kafka or streaming depth | Kafka ingestion and Spark Structured Streaming are the core path |
 | No open table format | Iceberg tables with compaction, snapshot expiry and schema evolution |
-| Little recent evidence of scale | Replay tool and benchmark at 100x speed, with published numbers |
+| Little recent evidence of scale | Replay tool and max-speed benchmark, with published numbers |
 | No architecture trade-offs on paper | Decision records in `docs/decisions/` |
 | Thin public GitHub | A runnable, documented, pinned repo |
 
@@ -33,7 +33,7 @@ It also reuses what the CV already proves: Airflow, dbt, idempotency, medallion 
 ```mermaid
 flowchart LR
     A[ADS-B API<br/>live positions] --> B[Producer<br/>Python, Avro]
-    R[Replay tool<br/>recorded data, 1x-100x] --> K
+    R[Replay tool<br/>recorded data, 1x to max speed] --> K
     B --> K[(Kafka<br/>KRaft)]
     K --> S[Spark Structured<br/>Streaming]
     S --> BR[(Iceberg bronze)]
@@ -70,7 +70,7 @@ flowchart LR
 flight-lakehouse/
 ├─ src/flight_lakehouse/
 │  ├─ producer/         # API client, Avro serialisation, Kafka producer
-│  ├─ replay/           # re-emit recorded data at 1x to 100x speed
+│  ├─ replay/           # re-emit recorded data at 1x up to max speed
 │  ├─ streaming/        # Spark jobs: bronze and silver
 │  ├─ maintenance/      # compaction, snapshot expiry, backfill
 │  └─ cli.py            # flight-lakehouse produce | replay | stream | maintain
@@ -111,29 +111,34 @@ The replay tool removes the dependency on a live API: record a few hours once, t
 Kept deliberately small so the project stays easy to run and maintain on a laptop.
 
 - **Region:** a 100 nm (about 185 km) radius around Barcelona airport (LEBL, 41.297 N, 2.078 E). It covers Barcelona, Girona and Reus and their approaches.
-- **Polling:** every 10 seconds.
+- **Polling:** every 4 minutes. adsb.lol allows 500 requests per day (`x-ratelimit-limit: 500;w=86400`), and 4 minutes is 360 requests a day, which leaves margin for restarts and testing. The producer reads the rate-limit headers on every call and backs off when few requests remain.
 - **Retention: 3 days** for the raw and cleaned data.
   - Kafka: `retention.ms` of 72 hours on `flight.positions.v1`.
   - Bronze and silver: a daily job deletes rows older than 3 days, then expires snapshots and removes orphan files so the storage is actually freed.
   - Gold: kept, because hourly and daily aggregates are tiny.
 
-**Expected volume** (an estimate to check against real numbers in Phase 1):
+**Expected volume** (an estimate to check against real numbers in Phase 1; about 50 aircraft per poll were seen on a test call):
 
 | | Per day | Kept (3 days) |
 |---|---|---|
-| Positions | ~1 million (~100–200 aircraft at peak, ~10–15 per second on average) | ~3 million |
-| Kafka (Avro) | ~120 MB | ~400 MB |
-| Iceberg bronze and silver (Parquet) | ~20–40 MB | ~100 MB |
+| Polls | 360 | 1,080 |
+| Positions | ~25,000 (~50–150 aircraft per poll) | ~75,000 |
+| Kafka (Avro) | ~3 MB | ~10 MB |
+| Iceberg bronze and silver (Parquet) | ~1 MB | ~3 MB |
 
-Benchmarks replay recorded data at up to 100x, about 1,000–1,500 events per second, instead of widening the region.
+**What 4-minute polling means:**
+- Live data gives one position per aircraft every 4 minutes. That is enough for airport traffic and route stats, but too coarse to see the shape of a holding pattern, so `gold.holding_patterns` is built and tested on replayed data from adsb.lol's full-resolution history dumps.
+- Benchmarks don't depend on the live rate: the replay tool has a max-speed mode that publishes a recording as fast as Kafka accepts it, and the numbers are reported as events per second.
 
 ## Data model
 
 **Kafka topic `flight.positions.v1`** (Avro, keyed by `icao24`)
-- `icao24`, `callsign`, `origin_country`
+Schema: [`schemas/flight_position.v1.avsc`](schemas/flight_position.v1.avsc), BACKWARD compatibility. SI units (metres, m/s) so another source such as OpenSky maps onto it directly.
+- `icao24`, `callsign`, `registration`, `aircraft_type`, `category`, `source`
 - `event_time`, `received_at`
 - `longitude`, `latitude`, `baro_altitude`, `geo_altitude`
 - `velocity`, `true_track`, `vertical_rate`, `on_ground`, `squawk`
+- No `origin_country`: adsb.lol doesn't send it. It can be derived later from the `icao24` address block.
 
 **Bronze `bronze.flight_positions`**
 - Raw events as received, plus Kafka metadata (`topic`, `partition`, `offset`, `ingested_at`)
@@ -171,10 +176,10 @@ Each phase is roughly a weekend or two and ends with something that works on its
 
 ### Phase 1: Ingestion
 
-- [ ] Avro schema v1 registered with a compatibility rule
-- [ ] Producer: poll the API, serialise, publish keyed by aircraft
-- [ ] Recorder and replay tool with a speed multiplier
-- [ ] Tests using recorded responses, so no live API calls in CI
+- [x] Avro schema v1 registered with a compatibility rule
+- [x] Producer: poll the API, serialise, publish keyed by aircraft
+- [x] Recorder and replay tool with a speed multiplier
+- [x] Tests using recorded responses, so no live API calls in CI
 
 **Done when:** events flow into Kafka from both the live API and the replay tool, and two replays of the same recording produce identical topic contents.
 
@@ -200,7 +205,7 @@ Each phase is roughly a weekend or two and ends with something that works on its
 
 - [ ] Grafana dashboards: consumer lag, throughput, freshness
 - [ ] Schema evolution demo: add a field as schema v2 without stopping the pipeline
-- [ ] Benchmark at 100x replay: events per second, end-to-end latency, query time before and after compaction
+- [ ] Benchmark with max-speed replay: events per second, end-to-end latency, query time before and after compaction
 - [ ] Write the method and results in `docs/benchmarks.md`
 
 **Done when:** the README shows real, reproducible numbers and `make benchmark` regenerates them.

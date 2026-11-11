@@ -1,0 +1,25 @@
+{
+  "type": "record",
+  "name": "FlightPosition",
+  "namespace": "flight_lakehouse.v1",
+  "doc": "One aircraft position. Units are SI (metres, m/s); times are UTC epoch milliseconds.",
+  "fields": [
+    {"name": "icao24", "type": "string", "doc": "ICAO 24-bit address as lowercase hex; a leading '~' marks a non-ICAO (TIS-B) address"},
+    {"name": "callsign", "type": ["null", "string"], "default": null, "doc": "Flight callsign, trimmed"},
+    {"name": "registration", "type": ["null", "string"], "default": null, "doc": "Aircraft registration, e.g. EC-OTA"},
+    {"name": "aircraft_type", "type": ["null", "string"], "default": null, "doc": "ICAO type designator, e.g. B38M"},
+    {"name": "category", "type": ["null", "string"], "default": null, "doc": "ADS-B emitter category, e.g. A3"},
+    {"name": "source", "type": "string", "doc": "How the position was obtained, e.g. adsb_icao, mlat"},
+    {"name": "event_time", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the position was observed"},
+    {"name": "received_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the API produced the response"},
+    {"name": "latitude", "type": "double"},
+    {"name": "longitude", "type": "double"},
+    {"name": "baro_altitude", "type": ["null", "double"], "default": null, "doc": "Barometric altitude in metres; null on the ground"},
+    {"name": "geo_altitude", "type": ["null", "double"], "default": null, "doc": "Geometric (GNSS) altitude in metres"},
+    {"name": "velocity", "type": ["null", "double"], "default": null, "doc": "Ground speed in m/s"},
+    {"name": "true_track", "type": ["null", "double"], "default": null, "doc": "Track over ground in degrees clockwise from north"},
+    {"name": "vertical_rate", "type": ["null", "double"], "default": null, "doc": "Barometric climb rate in m/s; negative when descending"},
+    {"name": "on_ground", "type": "boolean"},
+    {"name": "squawk", "type": ["null", "string"], "default": null, "doc": "Transponder code"}
+  ]
+}
