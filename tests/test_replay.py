@@ -45,5 +45,5 @@ def test_two_replays_publish_identical_records(recording):
 
 
 def test_invalid_speed(recording, publisher):
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="speed must be positive"):
         replay(recording, publisher, speed=0)

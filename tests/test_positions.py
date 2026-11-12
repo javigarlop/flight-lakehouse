@@ -90,7 +90,8 @@ def test_recording_maps_and_matches_the_schema(recording, schema):
         assert [p["icao24"] for p in positions] == sorted(p["icao24"] for p in positions)
         for p in positions:
             assert p["event_time"] <= p["received_at"]
-            assert -90 <= p["latitude"] <= 90 and -180 <= p["longitude"] <= 180
+            assert -90 <= p["latitude"] <= 90
+            assert -180 <= p["longitude"] <= 180
         # Raises if any record doesn't fit the Avro schema.
         fastavro.writer(io.BytesIO(), schema, positions, validator=True)
 
