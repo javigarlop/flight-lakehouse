@@ -8,7 +8,7 @@ import uuid
 import pyarrow as pa
 import pytest
 
-from tests.integration.helpers import host_catalog
+from tests.integration.helpers import host_catalog, purge_tables
 
 pytestmark = pytest.mark.integration
 
@@ -36,4 +36,4 @@ def test_create_write_read_table(catalog):
         result = catalog.load_table(table_name).scan().to_arrow().sort_by("icao24")
         assert result.equals(rows)
     finally:
-        catalog.drop_table(table_name)
+        purge_tables(catalog, table_name)

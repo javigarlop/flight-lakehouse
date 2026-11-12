@@ -5,7 +5,6 @@ Needs the stack running and the Spark image built (make up && make spark-build).
 Run with: make test-stream
 """
 
-import contextlib
 import subprocess
 import uuid
 from collections import Counter
@@ -21,7 +20,13 @@ from flight_lakehouse.producer.kafka import (
 )
 from flight_lakehouse.producer.positions import to_positions
 from flight_lakehouse.replay.replay import read_recording, replay
-from tests.integration.helpers import COMPOSE, host_catalog, spark_submit, table_rows
+from tests.integration.helpers import (
+    COMPOSE,
+    host_catalog,
+    purge_tables,
+    spark_submit,
+    table_rows,
+)
 
 pytestmark = [pytest.mark.integration, pytest.mark.spark]
 
@@ -51,9 +56,7 @@ def pipeline(catalog):
     }
     yield settings, topic, tables, f"/checkpoints/test-{suffix}"
 
-    for table in tables.values():
-        with contextlib.suppress(Exception):
-            catalog.purge_table(table)
+    purge_tables(catalog, *tables.values())
     admin = AdminClient({"bootstrap.servers": settings.kafka_bootstrap})
     admin.delete_topics([topic])[topic].result(timeout=30)
     registry = SchemaRegistryClient({"url": settings.schema_registry_url})

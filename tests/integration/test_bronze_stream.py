@@ -4,7 +4,6 @@ Needs the stack running and the Spark image built (make up && make spark-build).
 Slow (Spark starts twice), so it has its own marker. Run with: make test-stream
 """
 
-import contextlib
 import subprocess
 import time
 import uuid
@@ -19,7 +18,13 @@ from flight_lakehouse.producer.kafka import (
     value_subject,
 )
 from flight_lakehouse.replay.replay import replay
-from tests.integration.helpers import COMPOSE, host_catalog, spark_submit, table_rows
+from tests.integration.helpers import (
+    COMPOSE,
+    host_catalog,
+    purge_tables,
+    spark_submit,
+    table_rows,
+)
 
 pytestmark = [pytest.mark.integration, pytest.mark.spark]
 
@@ -50,9 +55,7 @@ def stream_target(catalog):
     register_schema(settings.schema_registry_url, topic)
     yield settings, topic, f"test_bronze.positions_{suffix}", f"/checkpoints/test-{suffix}"
 
-    # The table may not exist if the test failed early.
-    with contextlib.suppress(Exception):
-        catalog.purge_table(f"test_bronze.positions_{suffix}")
+    purge_tables(catalog, f"test_bronze.positions_{suffix}")
     admin = AdminClient({"bootstrap.servers": settings.kafka_bootstrap})
     admin.delete_topics([topic])[topic].result(timeout=30)
     registry = SchemaRegistryClient({"url": settings.schema_registry_url})

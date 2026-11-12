@@ -1,5 +1,6 @@
 """Connections from the host to the running stack, shared by the integration tests."""
 
+import contextlib
 import os
 from pathlib import Path
 
@@ -65,3 +66,12 @@ def table_rows(catalog, table: str):
         return catalog.load_table(table).scan().to_arrow()
     except Exception:  # noqa: BLE001 - not created yet
         return None
+
+
+def purge_tables(catalog, *tables: str) -> None:
+    """Drop test tables and delete their files. A table the test never created is skipped."""
+    from pyiceberg.exceptions import NoSuchTableError
+
+    for table in tables:
+        with contextlib.suppress(NoSuchTableError):
+            catalog.purge_table(table)
