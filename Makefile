@@ -2,10 +2,10 @@
 -include .env
 COMPOSE := docker compose -f infra/compose/docker-compose.yml --env-file .env
 
-.PHONY: help install lint format test cov audit check smoke test-stream up up-ui down logs setup produce replay spark-build stream stream-logs stream-stop
+.PHONY: help install lint format test cov diff-cov audit check smoke test-stream up up-ui down logs setup produce replay spark-build stream stream-logs stream-stop
 
 help: ## Show available targets
-	@grep -E '^[a-z-]+:.*## ' $(firstword $(MAKEFILE_LIST)) | awk -F':.*## ' '{printf "  %-10s %s\n", $$1, $$2}'
+	@grep -E '^[a-z-]+:.*## ' $(firstword $(MAKEFILE_LIST)) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
 
 install: ## Install dependencies with uv
 	uv sync
@@ -24,6 +24,10 @@ test: ## Run unit tests
 
 cov: ## Run unit tests with a coverage report
 	uv run pytest --cov
+
+diff-cov: ## Check coverage of lines changed since main (CI requires 80% on PRs)
+	uv run pytest --cov --cov-report=xml -q
+	uv run diff-cover coverage.xml --compare-branch=origin/main --fail-under=80
 
 audit: ## Check dependencies for known vulnerabilities and the repo for secrets
 	uv export --format requirements-txt --no-emit-project --no-dev -q | uvx pip-audit -r /dev/stdin --disable-pip --require-hashes

@@ -112,7 +112,7 @@ def test_kill_and_restart_loses_and_duplicates_nothing(stream_target, catalog, r
         # 2. Kill without warning: no graceful shutdown, like a crash.
         subprocess.run(["docker", "kill", name], check=True, capture_output=True)
     finally:
-        subprocess.run(["docker", "rm", "-f", name], capture_output=True)
+        subprocess.run(["docker", "rm", "-f", name], check=False, capture_output=True)
 
     written_before_kill = table_rows(catalog, table).num_rows
     assert 0 < written_before_kill < expected, "kill should land mid-stream"

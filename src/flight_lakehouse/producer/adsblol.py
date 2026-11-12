@@ -57,7 +57,7 @@ class AdsbLolClient:
         """All aircraft within radius_nm of a point, plus the current rate-limit state."""
         response = self._http.get(f"/v2/point/{latitude}/{longitude}/{radius_nm}")
         rate_limit = RateLimit.from_headers(response.headers)
-        if response.status_code == 429:
+        if response.status_code == httpx.codes.TOO_MANY_REQUESTS:
             retry_after = response.headers.get("retry-after")
             fallback = rate_limit.reset_s or 600
             raise RateLimited(float(retry_after) if retry_after else float(fallback))
