@@ -73,9 +73,11 @@ flight-lakehouse/
 │  ├─ replay/           # re-emit recorded data at 1x up to max speed
 │  ├─ streaming/        # Spark jobs: bronze and silver
 │  ├─ maintenance/      # compaction, snapshot expiry, backfill
-│  └─ cli.py            # flight-lakehouse produce | replay | stream | maintain
+│  ├─ reference/        # builds reference extracts, such as airports
+│  └─ cli.py            # flight-lakehouse produce | replay | stream | maintain | airports
 ├─ schemas/             # Avro schemas, versioned
 ├─ dbt/                 # gold models and tests (dbt-trino)
+│  └─ seeds/            # reference data as CSV, such as airports
 ├─ dags/                # Airflow DAGs
 ├─ infra/
 │  ├─ compose/          # docker-compose files and service config
@@ -150,8 +152,11 @@ Schema: [`schemas/flight_position.v1.avsc`](schemas/flight_position.v1.avsc), BA
 - Partitioned by event day; rows older than 3 days are deleted
 
 **Silver `silver.flights`**
-- One row per flight: positions sessionised by aircraft and time gap
-- `flight_id`, `icao24`, `callsign`, `first_seen`, `last_seen`, `departure_airport`, `arrival_airport` (nearest-airport match)
+- One row per flight: an aircraft's positions with no gap longer than 20 minutes (Spark session windows). A flight is written once the watermark passes its end, about 35 minutes after its last position
+- `flight_id` (`icao24` plus first-seen time, so replays give the same ids), `icao24`, `callsign`, `registration`, `aircraft_type`, `first_seen`, `last_seen`, `duration_s`, `positions`, first and last position
+- `departure_airport` and `arrival_airport`: the nearest airport within 25 km and 1,500 m above it, from the first and last position; null when the flight enters or leaves the area in cruise
+- Known limit: an aircraft that lands and leaves again within 20 minutes, transponder on, shows as one flight
+- Partitioned by `first_seen` day
 
 **Gold (dbt)**
 - `gold.airport_traffic_hourly`: arrivals, departures and aircraft on ground per airport and hour
@@ -159,7 +164,9 @@ Schema: [`schemas/flight_position.v1.avsc`](schemas/flight_position.v1.avsc), BA
 - `gold.holding_patterns`: flights circling near an airport before landing
 - `gold.pipeline_freshness`: end-to-end latency from `event_time` to gold
 
-Reference data: an open airports dataset (such as OurAirports) loaded as a dbt seed.
+**Reference data:** small, rarely changing tables kept as dbt seeds in `dbt/seeds/`, with their source documented in [`dbt/seeds/README.md`](dbt/seeds/README.md).
+- `airports.csv`: an extract of [OurAirports](https://ourairports.com/data/) (public domain), with airports within the polling radius plus 20 nm. Rebuild it with `make airports` after changing the polling area, then commit the diff.
+- Silver reads the file directly for airport matching for now (the Spark containers mount `dbt/seeds/`). From Phase 3, dbt loads it as `reference.airports` and every consumer reads that table.
 
 ## Phases
 
@@ -187,7 +194,7 @@ Each phase is roughly a weekend or two and ends with something that works on its
 
 - [x] Spark job writing bronze with checkpointing
 - [x] Silver job: deduplication, watermark for late data, rejected-rows table
-- [ ] Flight sessionisation into `silver.flights`
+- [x] Flight sessionisation into `silver.flights`
 - [ ] Failure test: kill and restart the job mid-stream (bronze passes; silver to do)
 
 **Done when:** after a kill and restart, silver has no lost and no duplicated events compared with the recording.
@@ -196,6 +203,7 @@ Each phase is roughly a weekend or two and ends with something that works on its
 
 - [ ] Trino connected to the catalog
 - [ ] dbt project: gold models, tests and the airports seed
+- [ ] Airports seed as the `reference.airports` table, with dbt tests (unique code, coordinates in range, plausible elevation); silver reads the table instead of the CSV
 - [ ] Airflow DAGs: dbt run, compaction, 3-day retention with snapshot expiry, backfill
 - [ ] Grafana dashboard on the gold tables, through the Trino data source
 

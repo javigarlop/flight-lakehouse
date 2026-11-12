@@ -3,7 +3,6 @@
 Needs Java 17 or later. Without it these tests are skipped locally; in CI they must run.
 """
 
-import os
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, call
 
@@ -11,7 +10,6 @@ import pytest
 
 pyspark = pytest.importorskip("pyspark")
 
-from pyspark.sql import SparkSession  # noqa: E402
 from pyspark.sql.types import (  # noqa: E402
     BinaryType,
     BooleanType,
@@ -60,25 +58,6 @@ BRONZE_SCHEMA = StructType(
 T0 = datetime(2026, 11, 1, 12, 0)
 # The fields decoded from Avro, before bronze's own columns.
 AVRO_FIELDS = BRONZE_SCHEMA.fieldNames()[: BRONZE_SCHEMA.fieldNames().index("schema_id")]
-
-
-@pytest.fixture(scope="module")
-def spark():
-    try:
-        session = (
-            SparkSession.builder.master("local[1]")
-            .appName("test-silver")
-            .config("spark.sql.session.timeZone", "UTC")
-            .config("spark.sql.shuffle.partitions", "1")
-            .config("spark.ui.enabled", "false")
-            .getOrCreate()
-        )
-    except Exception as exc:  # noqa: BLE001 - no usable Java, most likely
-        if os.environ.get("CI"):
-            raise
-        pytest.skip(f"local Spark unavailable (needs Java 17+): {exc}")
-    yield session
-    session.stop()
 
 
 _offsets = iter(range(1_000_000))
@@ -227,9 +206,9 @@ def option_calls(mock) -> dict[str, str]:
     return {c.args[0]: c.args[1] for c in mock.mock_calls if c[0].endswith(".option")}
 
 
-def test_read_bronze_skips_maintenance_snapshots():
+def test_read_table_skips_maintenance_snapshots():
     spark = MagicMock()
-    silver.read_bronze(spark, "lakehouse.bronze.t", max_files=7)
+    silver.read_table(spark, "lakehouse.bronze.t", max_files=7)
 
     spark.readStream.format.assert_called_once_with("iceberg")
     assert option_calls(spark) == {
@@ -288,11 +267,16 @@ def test_wait_for_table_gives_up(monkeypatch):
 def job(spark, monkeypatch):
     """silver.run with the session, table creation and queries replaced by mocks."""
     session = MagicMock()
-    tables, started = [], []
+    tables, started, read = [], [], []
     bronze = spark.createDataFrame([], BRONZE_SCHEMA)
     monkeypatch.setattr(silver, "build_session", lambda _name: session)
     monkeypatch.setattr(silver, "wait_for_table", lambda _spark, _table: None)
-    monkeypatch.setattr(silver, "read_bronze", lambda _spark, _table, _max: bronze)
+
+    def read_table(_spark, table, _max_files):
+        read.append(table)
+        return bronze  # it has every column the flights query needs too
+
+    monkeypatch.setattr(silver, "read_table", read_table)
     monkeypatch.setattr(
         silver, "ensure_table", lambda _spark, table, schema, day: tables.append((table, day))
     )
@@ -305,25 +289,36 @@ def job(spark, monkeypatch):
 
     def run(once: bool):
         silver.run(
-            "b", "p", "r", "/cp", once=once, trigger_s=30, max_files=10, watermark="1 minute"
+            "b",
+            "p",
+            "r",
+            "f",
+            "/cp",
+            once=once,
+            trigger_s=30,
+            max_files=10,
+            watermark="1 minute",
+            session_gap="20 minutes",
         )
 
-    return run, session, tables, started
+    return run, session, tables, started, read
 
 
-def test_run_starts_both_queries_and_waits_for_each_when_once(job):
-    run, session, tables, started = job
+def test_run_once_starts_flights_after_positions(job):
+    run, session, tables, started, read = job
     run(once=True)
 
-    assert tables == [("p", "event_time"), ("r", "ingested_at")]
-    assert started == [("p", "/cp/p", True), ("r", "/cp/r", True)]
+    assert read == ["b", "p"]  # flights read the positions table
+    assert tables == [("p", "event_time"), ("r", "ingested_at"), ("f", "first_seen")]
+    assert started == [("p", "/cp/p", True), ("r", "/cp/r", True), ("f", "/cp/f", True)]
     session.streams.awaitAnyTermination.assert_not_called()
 
 
-def test_run_continuous_stops_when_any_query_stops(job):
-    run, session, _tables, _started = job
+def test_run_continuous_runs_all_queries_until_one_stops(job):
+    run, session, _tables, started, _read = job
     run(once=False)
 
+    assert [table for table, _cp, _once in started] == ["p", "r", "f"]
     session.streams.awaitAnyTermination.assert_called_once()
 
 
@@ -332,14 +327,32 @@ def test_main_passes_arguments_to_run(monkeypatch):
     monkeypatch.setattr(silver, "run", lambda *args: calls.append(args))
     monkeypatch.setattr(
         "sys.argv",
-        ["silver.py", "--source=b", "--once", "--max-files=3", "--watermark=5 minutes"],
+        [
+            "silver.py",
+            "--source=b",
+            "--once",
+            "--max-files=3",
+            "--watermark=5 minutes",
+            "--session-gap=30 minutes",
+        ],
     )
     monkeypatch.setenv("CHECKPOINT_DIR", "/cp")
 
     silver.main()
 
     assert calls == [
-        ("b", silver.POSITIONS_TABLE, silver.REJECTED_TABLE, "/cp", True, 30, 3, "5 minutes")
+        (
+            "b",
+            silver.POSITIONS_TABLE,
+            silver.REJECTED_TABLE,
+            silver.FLIGHTS_TABLE,
+            "/cp",
+            True,
+            30,
+            3,
+            "5 minutes",
+            "30 minutes",
+        )
     ]
 
 

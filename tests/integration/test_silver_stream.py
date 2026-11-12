@@ -1,13 +1,15 @@
-"""Silver end to end: replayed duplicates collapse to one row each, bad rows are rejected.
+"""Silver end to end: duplicates collapse, bad rows are rejected, positions become flights.
 
-Kafka -> bronze -> silver, on a fresh topic and fresh tables. Both jobs run with --once.
+Kafka -> bronze -> silver, on a fresh topic and fresh tables. Both jobs run with --once,
+twice: the second round resumes from the checkpoints and closes the flights.
 Needs the stack running and the Spark image built (make up && make spark-build).
 Run with: make test-stream
 """
 
 import subprocess
 import uuid
-from collections import Counter
+from collections import Counter, defaultdict
+from datetime import UTC, datetime
 
 import pytest
 
@@ -53,6 +55,7 @@ def pipeline(catalog):
         "bronze": f"test_silver.bronze_{suffix}",
         "positions": f"test_silver.positions_{suffix}",
         "rejected": f"test_silver.rejected_{suffix}",
+        "flights": f"test_silver.flights_{suffix}",
     }
     yield settings, topic, tables, f"/checkpoints/test-{suffix}"
 
@@ -83,22 +86,7 @@ def run_job(*command: str) -> None:
     assert result.returncode == 0, result.stderr[-3000:]
 
 
-def test_silver_deduplicates_and_rejects(pipeline, catalog, recording):
-    settings, topic, tables, checkpoint = pipeline
-    publisher = PositionPublisher(settings.kafka_bootstrap, settings.schema_registry_url, topic)
-    for _ in range(REPLAYS):
-        replay(recording, publisher, speed=None)
-    expected = {
-        (p["icao24"], p["event_time"])
-        for response in read_recording(recording)
-        for p in to_positions(response)
-    }
-    # One position off the globe; the Avro schema accepts it, silver must not.
-    bad = {**to_positions(next(iter(read_recording(recording))))[0], "latitude": 95.0}
-    publisher.publish([bad])
-    publisher.flush()
-    publish_garbage(settings, topic)
-
+def run_pipeline(topic: str, tables: dict[str, str], checkpoint: str) -> None:
     spark = {name: f"lakehouse.{table}" for name, table in tables.items()}
     run_job(
         *spark_submit(
@@ -115,11 +103,33 @@ def test_silver_deduplicates_and_rejects(pipeline, catalog, recording):
             f"--source={spark['bronze']}",
             f"--positions-table={spark['positions']}",
             f"--rejected-table={spark['rejected']}",
+            f"--flights-table={spark['flights']}",
             f"--checkpoint-dir={checkpoint}",
             "--once",
-            "--max-files=2",  # several micro-batches, so dedup has to work across them
+            "--max-files=2",  # several micro-batches, so state has to carry across them
         )
     )
+
+
+def flight_id(icao24: str, event_time_ms: int) -> str:
+    started = datetime.fromtimestamp(event_time_ms / 1000, UTC)
+    return f"{icao24}-{started:%Y%m%dT%H%M%S}"
+
+
+def test_silver_deduplicates_rejects_and_sessionises(pipeline, catalog, recording):
+    settings, topic, tables, checkpoint = pipeline
+    publisher = PositionPublisher(settings.kafka_bootstrap, settings.schema_registry_url, topic)
+    for _ in range(REPLAYS):
+        replay(recording, publisher, speed=None)
+    fixture = [p for response in read_recording(recording) for p in to_positions(response)]
+    expected = {(p["icao24"], p["event_time"]) for p in fixture}
+    # One position off the globe; the Avro schema accepts it, silver must not.
+    bad = {**to_positions(next(iter(read_recording(recording))))[0], "latitude": 95.0}
+    publisher.publish([bad])
+    publisher.flush()
+    publish_garbage(settings, topic)
+
+    run_pipeline(topic, tables, checkpoint)
 
     positions = table_rows(catalog, tables["positions"])
     keys = [
@@ -135,3 +145,29 @@ def test_silver_deduplicates_and_rejects(pipeline, catalog, recording):
     rejected = table_rows(catalog, tables["rejected"])
     reasons = sorted(tuple(r) for r in rejected["reject_reasons"].to_pylist())
     assert reasons == [("decode_failed",), ("latitude_out_of_range",)]
+
+    # Every flight is still open: nothing has moved event time past the session gap.
+    assert table_rows(catalog, tables["flights"]).num_rows == 0
+
+    # Round 2: one aircraft seen two hours later moves the watermark past every
+    # fixture flight, so they close. Its own flight stays open.
+    later = {**fixture[0], "icao24": "ffffff", "callsign": "CLOCK"}
+    later["event_time"] = later["received_at"] = max(p["event_time"] for p in fixture) + 7_200_000
+    publisher.publish([later])
+    publisher.flush()
+    run_pipeline(topic, tables, checkpoint)
+
+    by_aircraft = defaultdict(list)
+    for p in fixture:
+        by_aircraft[p["icao24"]].append(p)
+    expected_flights = {
+        flight_id(icao24, min(p["event_time"] for p in ps)): len({p["event_time"] for p in ps})
+        for icao24, ps in by_aircraft.items()
+    }
+    rows = table_rows(catalog, tables["flights"]).to_pylist()
+    assert {f["flight_id"]: f["positions"] for f in rows} == expected_flights
+    assert len(rows) == len(expected_flights), "a flight was written twice"
+
+    # Aircraft on the ground at Barcelona for the whole recording.
+    parked = {f["icao24"] for f in rows if f["departure_airport"] == f["arrival_airport"] == "LEBL"}
+    assert {"344045", "344156", "3c6655"} <= parked

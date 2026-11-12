@@ -4,8 +4,11 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-SCHEMAS_DIR = Path(__file__).resolve().parents[2] / "schemas"
+ROOT = Path(__file__).resolve().parents[2]
+SCHEMAS_DIR = ROOT / "schemas"
 POSITIONS_SCHEMA = SCHEMAS_DIR / "flight_position.v1.avsc"
+# Reference data lives as dbt seeds; the Spark jobs read the same files.
+AIRPORTS_CSV = ROOT / "dbt" / "seeds" / "airports.csv"
 
 
 def _env(name: str, default: str) -> str:

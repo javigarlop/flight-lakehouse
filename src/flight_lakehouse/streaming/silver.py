@@ -1,4 +1,4 @@
-"""Silver job: lakehouse.bronze.flight_positions -> silver.flight_positions and rejected_positions.
+"""Silver job: bronze.flight_positions -> silver.flight_positions, rejected_positions and flights.
 
 Each bronze row is checked against the validation rules below:
 - Rows that pass are deduplicated on (icao24, event_time) and appended to
@@ -15,9 +15,11 @@ event_time seen is discarded as late. Spark reports those rows as
 numRowsDroppedByWatermark in the query progress. Bronze still holds them, so
 a backfill can recover them.
 
-Two streaming queries read bronze, one for each output table. Each has its own
-checkpoint. Iceberg's sink skips a micro-batch it already committed, so a
-restart neither loses nor duplicates rows.
+A third query reads silver.flight_positions and sessionises it into silver.flights
+(see flights.py).
+
+Each streaming query has its own checkpoint. Iceberg's sink skips a micro-batch it
+already committed, so a restart neither loses nor duplicates rows.
 
 Run inside the Spark container:
     spark-submit src/flight_lakehouse/streaming/silver.py [--once]
@@ -33,11 +35,13 @@ from pyspark.sql import functions as F
 from pyspark.sql.streaming import StreamingQuery
 
 from flight_lakehouse.streaming.bronze import TABLE as BRONZE_TABLE
+from flight_lakehouse.streaming.flights import load_airports, sessionise
 from flight_lakehouse.streaming.session import CATALOG, build_session
 from flight_lakehouse.streaming.tables import ensure_table
 
 POSITIONS_TABLE = f"{CATALOG}.silver.flight_positions"
 REJECTED_TABLE = f"{CATALOG}.silver.rejected_positions"
+FLIGHTS_TABLE = f"{CATALOG}.silver.flights"
 DEDUP_KEY = ["icao24", "event_time"]
 
 # Columns kept in silver: the position fields plus lineage back to bronze and Kafka.
@@ -127,10 +131,11 @@ def rejected_positions(checked: DataFrame) -> DataFrame:
     )
 
 
-def read_bronze(spark: SparkSession, table: str, max_files: int) -> DataFrame:
+def read_table(spark: SparkSession, table: str, max_files: int) -> DataFrame:
+    """Stream the rows appended to an Iceberg table."""
     return (
         spark.readStream.format("iceberg")
-        # Retention deletes and compaction rewrites in bronze add no new rows; skip them
+        # Retention deletes and compaction rewrites add no new rows; skip them
         # instead of failing the stream.
         .option("streaming-skip-delete-snapshots", "true")
         .option("streaming-skip-overwrite-snapshots", "true")
@@ -171,15 +176,17 @@ def run(
     source: str,
     positions_table: str,
     rejected_table: str,
+    flights_table: str,
     checkpoint_dir: str,
     once: bool,
     trigger_s: int,
     max_files: int,
     watermark: str,
+    session_gap: str,
 ) -> None:
     spark = build_session("silver")
     wait_for_table(spark, source)
-    checked = with_reject_reasons(read_bronze(spark, source, max_files))
+    checked = with_reject_reasons(read_table(spark, source, max_files))
 
     outputs = [
         (valid_positions(checked, watermark), positions_table, "event_time"),
@@ -190,11 +197,20 @@ def run(
         ensure_table(spark, table, rows.schema, day_column)
         queries.append(start(rows, table, f"{checkpoint_dir}/{table}", once, trigger_s))
 
+    flights = sessionise(
+        read_table(spark, positions_table, max_files), session_gap, watermark, load_airports()
+    )
+    ensure_table(spark, flights_table, flights.schema, "first_seen")
+    flights_checkpoint = f"{checkpoint_dir}/{flights_table}"
+
     if once:
         for query in queries:
             query.awaitTermination()
+        # Flights read the positions table, so they start once this run's positions are in.
+        start(flights, flights_table, flights_checkpoint, once, trigger_s).awaitTermination()
     else:
-        # Raises as soon as either query fails, so the container restarts both.
+        queries.append(start(flights, flights_table, flights_checkpoint, once, trigger_s))
+        # Raises as soon as any query fails, so the container restarts them all.
         spark.streams.awaitAnyTermination()
 
 
@@ -204,13 +220,16 @@ def main() -> None:
     parser.add_argument("--source", default=BRONZE_TABLE, help="bronze table to read")
     parser.add_argument("--positions-table", default=POSITIONS_TABLE)
     parser.add_argument("--rejected-table", default=REJECTED_TABLE)
+    parser.add_argument("--flights-table", default=FLIGHTS_TABLE)
     parser.add_argument(
         "--checkpoint-dir",
         default=os.environ.get("CHECKPOINT_DIR", "/checkpoints"),
         help="each query checkpoints to <dir>/<table>",
     )
     parser.add_argument(
-        "--once", action="store_true", help="process what is in bronze now, then stop"
+        "--once",
+        action="store_true",
+        help="process what is in bronze now, then stop (flights still open stay in state)",
     )
     parser.add_argument(
         "--trigger-seconds", type=int, default=int(os.environ.get("TRIGGER_SECONDS", "30"))
@@ -221,18 +240,25 @@ def main() -> None:
     parser.add_argument(
         "--watermark",
         default=os.environ.get("SILVER_WATERMARK", "15 minutes"),
-        help="how far behind the newest event_time a duplicate is still caught",
+        help="how far behind the newest event_time a duplicate or late position is still used",
+    )
+    parser.add_argument(
+        "--session-gap",
+        default=os.environ.get("FLIGHT_SESSION_GAP", "20 minutes"),
+        help="a longer gap between an aircraft's positions starts a new flight",
     )
     args = parser.parse_args()
     run(
         args.source,
         args.positions_table,
         args.rejected_table,
+        args.flights_table,
         args.checkpoint_dir,
         args.once,
         args.trigger_seconds,
         args.max_files,
         args.watermark,
+        args.session_gap,
     )
 
 

@@ -2,7 +2,7 @@
 -include .env
 COMPOSE := docker compose -f infra/compose/docker-compose.yml --env-file .env
 
-.PHONY: help install lint format test cov diff-cov audit check smoke test-stream up up-ui down logs setup produce replay spark-build stream stream-logs stream-stop
+.PHONY: help install lint format test cov diff-cov audit check smoke test-stream up up-ui down logs setup produce replay airports spark-build stream stream-logs stream-stop
 
 help: ## Show available targets
 	@grep -E '^[a-z-]+:.*## ' $(firstword $(MAKEFILE_LIST)) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -54,6 +54,9 @@ produce: .env ## Run the producer in this terminal instead of Docker (Ctrl+C to 
 
 replay: .env ## Replay the test recording into Kafka at max speed
 	uv run --env-file .env flight-lakehouse replay tests/fixtures/adsblol_bcn_100nm.jsonl --max
+
+airports: ## Rebuild the airports seed for the polling area from OurAirports (then commit it)
+	uv run --env-file .env flight-lakehouse airports
 
 up-ui: up ## Start the stack plus the web UIs
 	$(COMPOSE) --profile ui up -d kafka-ui registry-ui
