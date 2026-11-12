@@ -8,7 +8,6 @@ import contextlib
 import subprocess
 import time
 import uuid
-from pathlib import Path
 
 import pytest
 
@@ -20,36 +19,17 @@ from flight_lakehouse.producer.kafka import (
     value_subject,
 )
 from flight_lakehouse.replay.replay import replay
-from tests.integration.helpers import host_catalog
+from tests.integration.helpers import COMPOSE, host_catalog, spark_submit, table_rows
 
 pytestmark = [pytest.mark.integration, pytest.mark.spark]
 
-ROOT = Path(__file__).resolve().parents[2]
-COMPOSE = [
-    "docker",
-    "compose",
-    "-f",
-    str(ROOT / "infra/compose/docker-compose.yml"),
-    "--env-file",
-    str(ROOT / ".env"),
-    "--profile",
-    "stream",
-]
 REPLAYS = 5  # 5 x 138 positions from the fixture
 
 
 def bronze_cmd(topic: str, table: str, checkpoint: str, *extra: str) -> list[str]:
-    return [
-        "/opt/spark/bin/spark-submit",
-        "--master=local[2]",
-        "--driver-memory=1g",
-        "--conf=spark.ui.showConsoleProgress=false",
-        "src/flight_lakehouse/streaming/bronze.py",
-        f"--topic={topic}",
-        f"--table={table}",
-        f"--checkpoint={checkpoint}",
-        *extra,
-    ]
+    return spark_submit(
+        "bronze", f"--topic={topic}", f"--table={table}", f"--checkpoint={checkpoint}", *extra
+    )
 
 
 @pytest.fixture
@@ -78,13 +58,6 @@ def stream_target(catalog):
     registry = SchemaRegistryClient({"url": settings.schema_registry_url})
     registry.delete_subject(value_subject(topic), permanent=False)
     registry.delete_subject(value_subject(topic), permanent=True)
-
-
-def table_rows(catalog, table: str):
-    try:
-        return catalog.load_table(table).scan().to_arrow()
-    except Exception:  # noqa: BLE001 - not created yet
-        return None
 
 
 def test_kill_and_restart_loses_and_duplicates_nothing(stream_target, catalog, recording):

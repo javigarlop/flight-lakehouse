@@ -16,11 +16,12 @@ import argparse
 import os
 from pathlib import Path
 
-from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 from pyspark.sql.avro.functions import from_avro
 
 from flight_lakehouse.streaming.session import CATALOG, build_session
+from flight_lakehouse.streaming.tables import ensure_table
 
 SCHEMA_PATH = Path(os.environ.get("SCHEMAS_DIR", "/app/schemas")) / "flight_position.v1.avsc"
 TABLE = f"{CATALOG}.bronze.flight_positions"
@@ -33,7 +34,7 @@ def decode(kafka: DataFrame, avro_schema: str) -> DataFrame:
     """Turn raw Kafka rows into bronze rows."""
     body = F.expr(f"substring(value, {WIRE_HEADER_BYTES + 1}, length(value) - {WIRE_HEADER_BYTES})")
     schema_id = F.conv(F.hex(F.substring("value", 2, 4)), 16, 10).cast("int")
-    # PERMISSIVE: a message that doesn't decode gives a null struct instead of failing the job.
+    # PERMISSIVE: a message that doesn't decode gives a struct of nulls instead of failing the job.
     # Note: v1 is used as the writer schema; schema v2 (Phase 4) will need picking by schema_id.
     position = from_avro(body, avro_schema, {"mode": "PERMISSIVE"})
     return kafka.select(
@@ -48,27 +49,13 @@ def decode(kafka: DataFrame, avro_schema: str) -> DataFrame:
         "p.*",
         "schema_id",
         # Raw bytes only when decoding failed, so the table doesn't store everything twice.
-        F.when(F.col("p").isNull(), F.col("raw_value")).alias("raw_value"),
+        # icao24 is required by the schema, so a null one means the message didn't decode.
+        F.when(F.col("p.icao24").isNull(), F.col("raw_value")).alias("raw_value"),
         "kafka_topic",
         "kafka_partition",
         "kafka_offset",
         "kafka_timestamp",
         F.current_timestamp().alias("ingested_at"),
-    )
-
-
-def ensure_table(spark: SparkSession, table: str, schema) -> None:
-    namespace = table.rsplit(".", 1)[0]
-    spark.sql(f"CREATE NAMESPACE IF NOT EXISTS {namespace}")
-    if spark.catalog.tableExists(table):
-        return
-    (
-        spark.createDataFrame([], schema)
-        .writeTo(table)
-        .using("iceberg")
-        .partitionedBy(F.days("ingested_at"))
-        .tableProperty("format-version", "2")
-        .create()
     )
 
 
@@ -87,7 +74,7 @@ def run(
         .load()
     )
     rows = decode(kafka, SCHEMA_PATH.read_text())
-    ensure_table(spark, table, rows.schema)
+    ensure_table(spark, table, rows.schema, day_column="ingested_at")
 
     writer = (
         rows.writeStream.format("iceberg")

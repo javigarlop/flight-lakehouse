@@ -186,7 +186,7 @@ Each phase is roughly a weekend or two and ends with something that works on its
 ### Phase 2: Streaming to Iceberg
 
 - [x] Spark job writing bronze with checkpointing
-- [ ] Silver job: deduplication, watermark for late data, rejected-rows table
+- [x] Silver job: deduplication, watermark for late data, rejected-rows table
 - [ ] Flight sessionisation into `silver.flights`
 - [ ] Failure test: kill and restart the job mid-stream (bronze passes; silver to do)
 
