@@ -12,6 +12,7 @@ from flight_lakehouse.producer.kafka import (
     PositionPublisher,
     ensure_topic,
     register_schema,
+    registry_client,
     value_subject,
 )
 from flight_lakehouse.producer.positions import to_positions
@@ -29,7 +30,6 @@ def settings() -> Settings:
 def fresh_topic(settings: Settings):
     """Factory for throwaway topics with the schema registered; deletes them afterwards."""
     from confluent_kafka.admin import AdminClient
-    from confluent_kafka.schema_registry import SchemaRegistryClient
 
     created: list[str] = []
 
@@ -46,7 +46,7 @@ def fresh_topic(settings: Settings):
         admin = AdminClient({"bootstrap.servers": settings.kafka_bootstrap})
         for future in admin.delete_topics(created).values():
             future.result(timeout=30)
-        registry = SchemaRegistryClient({"url": settings.schema_registry_url})
+        registry = registry_client(settings.schema_registry_url)
         for topic in created:
             registry.delete_subject(value_subject(topic), permanent=False)
             registry.delete_subject(value_subject(topic), permanent=True)
@@ -94,7 +94,6 @@ def test_two_replays_produce_identical_topics(settings, recording, fresh_topic):
 
 
 def test_values_decode_with_the_registered_schema(settings, recording, fresh_topic):
-    from confluent_kafka.schema_registry import SchemaRegistryClient
     from confluent_kafka.schema_registry.avro import AvroDeserializer
     from confluent_kafka.serialization import MessageField, SerializationContext
 
@@ -104,7 +103,7 @@ def test_values_decode_with_the_registered_schema(settings, recording, fresh_top
         PositionPublisher(settings.kafka_bootstrap, settings.schema_registry_url, topic),
         speed=None,
     )
-    registry = SchemaRegistryClient({"url": settings.schema_registry_url})
+    registry = registry_client(settings.schema_registry_url)
     decode = AvroDeserializer(registry)
     ctx = SerializationContext(topic, MessageField.VALUE)
 
@@ -119,7 +118,6 @@ def test_values_decode_with_the_registered_schema(settings, recording, fresh_top
 
 
 def test_compatibility_rule_is_backward(settings):
-    from confluent_kafka.schema_registry import SchemaRegistryClient
 
-    registry = SchemaRegistryClient({"url": settings.schema_registry_url})
+    registry = registry_client(settings.schema_registry_url)
     assert registry.get_compatibility(value_subject(settings.topic)) == "BACKWARD"

@@ -212,9 +212,9 @@ Each phase is roughly a weekend or two and ends with something that works on its
 
 ### Phase 5: Portfolio polish
 
+- [ ] Make the repo public (decided: only after Phase 4 is done)
 - [ ] README with the architecture diagram, quick start, dashboard screenshot and benchmark results
 - [ ] Decision records: Spark vs Flink, Iceberg vs Delta, partitioning strategy, catalog choice
-- [ ] Make the repo public
 
 ## Open decisions
 
@@ -223,7 +223,7 @@ Each phase is roughly a weekend or two and ends with something that works on its
 | Data source | OpenSky, adsb.lol, Wikimedia EventStreams | **Decided: adsb.lol** ([0002](docs/decisions/0002-data-source.md)) |
 | Object store | MinIO, SeaweedFS, Garage | **Decided: SeaweedFS** ([0001](docs/decisions/0001-object-store.md)) |
 | Dashboard | Grafana, Superset, Evidence | **Decided: Grafana** ([0003](docs/decisions/0003-dashboard.md)) |
-| Repo visibility | Private first, public later | Public once Phase 1 works |
+| Repo visibility | Private first, public later | **Decided: public once Phase 4 is done**, so the repo goes public with its benchmark numbers |
 | Optional Kubernetes | kind with Terraform, or skip | Only after Phase 5 |
 
 ## Risks

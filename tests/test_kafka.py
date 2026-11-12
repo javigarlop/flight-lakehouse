@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from confluent_kafka import KafkaException
+from confluent_kafka.serialization import MessageField, SerializationContext
 
 from flight_lakehouse.producer import kafka
 from flight_lakehouse.producer.kafka import (
@@ -94,6 +95,22 @@ def test_publisher_never_registers_schemas(producer):
     conf = kafka.AvroSerializer.call_args.kwargs["conf"]
     assert conf["auto.register.schemas"] is False
     assert producer.call_args.args[0]["enable.idempotence"] is True
+
+
+def test_registry_requests_time_out():
+    # Without a timeout, one unanswered registry request blocks the producer forever.
+    with patch.object(kafka, "SchemaRegistryClient") as cls:
+        register_schema("http://registry", "positions")
+    assert cls.call_args.args[0] == {"url": "http://registry", "timeout": kafka.REGISTRY_TIMEOUT_S}
+
+
+def test_publisher_uses_topic_subject_without_registry_lookup(producer):
+    PositionPublisher("broker:9092", "http://registry", "positions")
+    registry_conf = kafka.SchemaRegistryClient.call_args.args[0]
+    assert registry_conf["timeout"] == kafka.REGISTRY_TIMEOUT_S
+    strategy = kafka.AvroSerializer.call_args.kwargs["conf"]["subject.name.strategy"]
+    ctx = SerializationContext("positions", MessageField.VALUE)
+    assert strategy(ctx, "FlightPosition") == "positions-value"
 
 
 def test_publish_sends_keyed_avro_records(producer):

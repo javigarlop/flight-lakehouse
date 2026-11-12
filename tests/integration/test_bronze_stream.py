@@ -15,6 +15,7 @@ from flight_lakehouse.producer.kafka import (
     PositionPublisher,
     ensure_topic,
     register_schema,
+    registry_client,
     value_subject,
 )
 from flight_lakehouse.replay.replay import replay
@@ -46,7 +47,6 @@ def catalog():
 def stream_target(catalog):
     """A fresh topic filled with the fixture, plus names for a fresh table and checkpoint."""
     from confluent_kafka.admin import AdminClient
-    from confluent_kafka.schema_registry import SchemaRegistryClient
 
     settings = Settings.from_env()
     suffix = uuid.uuid4().hex[:8]
@@ -58,7 +58,7 @@ def stream_target(catalog):
     purge_tables(catalog, f"test_bronze.positions_{suffix}")
     admin = AdminClient({"bootstrap.servers": settings.kafka_bootstrap})
     admin.delete_topics([topic])[topic].result(timeout=30)
-    registry = SchemaRegistryClient({"url": settings.schema_registry_url})
+    registry = registry_client(settings.schema_registry_url)
     registry.delete_subject(value_subject(topic), permanent=False)
     registry.delete_subject(value_subject(topic), permanent=True)
 

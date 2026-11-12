@@ -16,6 +16,7 @@ from flight_lakehouse.producer.kafka import (
     PositionPublisher,
     ensure_topic,
     register_schema,
+    registry_client,
     value_subject,
 )
 from flight_lakehouse.producer.positions import to_positions
@@ -42,7 +43,6 @@ def catalog():
 def pipeline(catalog):
     """A fresh topic plus names for fresh bronze and silver tables and checkpoints."""
     from confluent_kafka.admin import AdminClient
-    from confluent_kafka.schema_registry import SchemaRegistryClient
 
     settings = Settings.from_env()
     suffix = uuid.uuid4().hex[:8]
@@ -59,7 +59,7 @@ def pipeline(catalog):
     purge_tables(catalog, *tables.values())
     admin = AdminClient({"bootstrap.servers": settings.kafka_bootstrap})
     admin.delete_topics([topic])[topic].result(timeout=30)
-    registry = SchemaRegistryClient({"url": settings.schema_registry_url})
+    registry = registry_client(settings.schema_registry_url)
     registry.delete_subject(value_subject(topic), permanent=False)
     registry.delete_subject(value_subject(topic), permanent=True)
 
