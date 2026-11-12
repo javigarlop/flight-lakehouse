@@ -26,3 +26,7 @@ make down      # stop the stack (data is kept in Docker volumes)
 ## Data and attribution
 
 Aircraft position data comes from [adsb.lol](https://adsb.lol) under the [Open Database License (ODbL)](https://opendatacommons.org/licenses/odbl/1-0/). Recorded samples in this repo and tables derived from them are available under the same licence.
+
+## Licence
+
+The code is licensed under the [Apache License 2.0](LICENSE). Data recorded from adsb.lol stays under ODbL, as described above.
