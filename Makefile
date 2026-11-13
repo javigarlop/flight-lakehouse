@@ -2,7 +2,7 @@
 -include .env
 COMPOSE := docker compose -f infra/compose/docker-compose.yml --env-file .env
 
-.PHONY: help install lint format test cov diff-cov audit check smoke test-stream up up-ui down logs setup produce replay spark-build stream stream-logs stream-stop
+.PHONY: help install lint format test cov diff-cov audit check smoke test-stream up up-ui down logs setup produce replay airports spark-build stream stream-logs stream-stop
 
 help: ## Show available targets
 	@grep -E '^[a-z-]+:.*## ' $(firstword $(MAKEFILE_LIST)) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -55,26 +55,30 @@ produce: .env ## Run the producer in this terminal instead of Docker (Ctrl+C to 
 replay: .env ## Replay the test recording into Kafka at max speed
 	uv run --env-file .env flight-lakehouse replay tests/fixtures/adsblol_bcn_100nm.jsonl --max
 
+airports: ## Rebuild the airports seed for the polling area from OurAirports (then commit it)
+	uv run --env-file .env flight-lakehouse airports
+
 up-ui: up ## Start the stack plus the web UIs
 	$(COMPOSE) --profile ui up -d kafka-ui registry-ui
 	@echo "Kafka UI:          http://localhost:$(or $(KAFKA_UI_HOST_PORT),8085)"
 	@echo "Registry UI:       http://localhost:$(or $(REGISTRY_UI_HOST_PORT),8086)"
 	@echo "SeaweedFS filer:   http://localhost:$(or $(SEAWEEDFS_FILER_HOST_PORT),8888)/buckets/"
 	@echo "SeaweedFS master:  http://localhost:$(or $(SEAWEEDFS_MASTER_HOST_PORT),9333)"
-	@echo "Spark UI:          http://localhost:$(or $(SPARK_UI_HOST_PORT),4040)  (while make stream runs)"
+	@echo "Spark UI:          http://localhost:$(or $(SPARK_UI_HOST_PORT),4040) bronze, :$(or $(SPARK_SILVER_UI_HOST_PORT),4041) silver (while make stream runs)"
 
 spark-build: ## Build the producer and Spark images
 	$(COMPOSE) --profile stream build producer spark-bronze
 
-stream: up ## Start the pipeline in the background: live producer + Spark bronze job
-	$(COMPOSE) --profile stream up -d --build producer spark-bronze
-	@echo "Spark UI: http://localhost:$(or $(SPARK_UI_HOST_PORT),4040)"
+stream: up ## Start the pipeline in the background: live producer + Spark bronze and silver jobs
+	$(COMPOSE) --profile stream up -d --build producer spark-bronze spark-silver
+	@echo "Spark UI (bronze): http://localhost:$(or $(SPARK_UI_HOST_PORT),4040)"
+	@echo "Spark UI (silver): http://localhost:$(or $(SPARK_SILVER_UI_HOST_PORT),4041)"
 
 stream-logs: ## Follow the producer and Spark logs
-	$(COMPOSE) --profile stream logs -f producer spark-bronze
+	$(COMPOSE) --profile stream logs -f producer spark-bronze spark-silver
 
-stream-stop: ## Stop the producer and Spark job (the rest of the stack keeps running)
-	$(COMPOSE) --profile stream stop producer spark-bronze
+stream-stop: ## Stop the producer and Spark jobs (the rest of the stack keeps running)
+	$(COMPOSE) --profile stream stop producer spark-bronze spark-silver
 
 logs: ## Follow the stack's logs
 	$(COMPOSE) logs -f

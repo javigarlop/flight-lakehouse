@@ -4,29 +4,29 @@ A real-time lakehouse that ingests live aircraft position data from open ADS-B f
 
 ## Goals
 
-- Show hands-on Spark, Kafka and Iceberg work, which my CV does not yet prove.
+- Build a working streaming lakehouse end to end with Kafka, Spark and Iceberg.
 - Produce measured numbers (throughput, latency, query time) rather than tool lists.
 - Put architecture trade-offs on paper as short decision records.
-- Be the flagship public data engineering repo on my GitHub: one command to run, a clear README, a dashboard screenshot.
+- Make it easy to try: one command to run, a clear README, a dashboard screenshot.
 
 ## Non-goals
 
 - **No cloud bill.** Everything runs locally in Docker Compose. Terraform and Kubernetes are optional extras.
-- **No production claims.** This is project experience and is listed that way on the CV.
+- **No production claims.** This is a portfolio and learning project, not a production system.
 - **No proprietary or source-available components** where an open source one exists.
 - **No secrets in the repo.** API credentials for the data source live in an ignored `.env`.
 
-## Why this project
+## What it demonstrates
 
-| CV gap | How this project closes it |
+| Area | How |
 |---|---|
-| No Spark, Kafka or streaming depth | Kafka ingestion and Spark Structured Streaming are the core path |
-| No open table format | Iceberg tables with compaction, snapshot expiry and schema evolution |
-| Little recent evidence of scale | Replay tool and max-speed benchmark, with published numbers |
-| No architecture trade-offs on paper | Decision records in `docs/decisions/` |
-| Thin public GitHub | A runnable, documented, pinned repo |
+| Streaming | Kafka ingestion and Spark Structured Streaming are the core path, with exactly-once writes |
+| Open table format | Iceberg tables with compaction, snapshot expiry and schema evolution |
+| Scale | Replay tool and max-speed benchmark, with published numbers |
+| Architecture trade-offs | Decision records in `docs/decisions/` |
+| Reliability | Idempotent replays, kill-and-restart tests, data validation and CI |
 
-It also reuses what the CV already proves: Airflow, dbt, idempotency, medallion layering, testing and CI.
+Batch tooling sits alongside it: Airflow, dbt, medallion layering and testing.
 
 ## Architecture
 
@@ -40,7 +40,7 @@ flowchart LR
     S --> SI[(Iceberg silver)]
     SI --> D[dbt on Trino]
     D --> G[(Iceberg gold)]
-    G --> V[Dashboard]
+    G --> V[Grafana<br/>dashboard]
     AF[Airflow] -.-> D
     AF -.-> M[Maintenance<br/>compaction, expiry, backfill]
     M -.-> SI
@@ -52,16 +52,16 @@ flowchart LR
 
 | Layer | Choice | Why |
 |---|---|---|
-| Language and packaging | Python 3.12, `uv` | Same tooling as my other projects |
-| Ingestion | Apache Kafka (KRaft mode), Avro, Apicurio Registry | Kafka is the top streaming keyword; the registry shows schema contracts |
-| Processing | Spark Structured Streaming (PySpark) | Spark is the most requested skill I lack |
+| Language and packaging | Python 3.12, `uv` | Fast, reproducible environments from one lock file |
+| Ingestion | Apache Kafka (KRaft mode), Avro, Apicurio Registry | The standard streaming log; the registry enforces schema contracts |
+| Processing | Spark Structured Streaming (PySpark) | Widely used, with first-class Kafka and Iceberg connectors |
 | Storage | Apache Iceberg on SeaweedFS (S3 API) | The open table format most engines support; SeaweedFS is Apache-licensed and maintained ([decision](docs/decisions/0001-object-store.md)) |
-| Catalog | Apache Polaris (Iceberg REST), state in Postgres | Vendor-neutral, and links to my Snowflake experience; Postgres keeps tables across restarts (Polaris's default is in memory) |
-| Query and transform | Trino with dbt (`dbt-trino`) | Reuses my dbt strength on a new engine |
+| Catalog | Apache Polaris (Iceberg REST), state in Postgres | Vendor-neutral REST catalog, originally from Snowflake; Postgres keeps tables across restarts (Polaris's default is in memory) |
+| Query and transform | Trino with dbt (`dbt-trino`) | SQL over Iceberg, with dbt for tested, versioned gold models |
 | Orchestration | Airflow 3 | Compaction, snapshot expiry, backfills and dbt runs |
-| Quality | dbt tests, schema compatibility checks in the registry | Extends my reliability story to streaming |
+| Quality | dbt tests, schema compatibility checks in the registry | Catches bad data and breaking schema changes before they reach gold |
 | Observability | Prometheus and Grafana | Consumer lag, freshness, throughput |
-| Serving | Superset or Evidence | A dashboard screenshot is what recruiters see |
+| Serving | Grafana on Trino ([decision](docs/decisions/0003-dashboard.md)) | The Grafana already used for observability also shows the gold tables, so there's no extra service |
 | Infra and CI | Docker Compose, GitHub Actions; optional Terraform and kind | One `make up` to run everything |
 
 ## Repo layout
@@ -73,9 +73,11 @@ flight-lakehouse/
 │  ├─ replay/           # re-emit recorded data at 1x up to max speed
 │  ├─ streaming/        # Spark jobs: bronze and silver
 │  ├─ maintenance/      # compaction, snapshot expiry, backfill
-│  └─ cli.py            # flight-lakehouse produce | replay | stream | maintain
+│  ├─ reference/        # builds reference extracts, such as airports
+│  └─ cli.py            # flight-lakehouse produce | replay | stream | maintain | airports
 ├─ schemas/             # Avro schemas, versioned
 ├─ dbt/                 # gold models and tests (dbt-trino)
+│  └─ seeds/            # reference data as CSV, such as airports
 ├─ dags/                # Airflow DAGs
 ├─ infra/
 │  ├─ compose/          # docker-compose files and service config
@@ -150,8 +152,11 @@ Schema: [`schemas/flight_position.v1.avsc`](schemas/flight_position.v1.avsc), BA
 - Partitioned by event day; rows older than 3 days are deleted
 
 **Silver `silver.flights`**
-- One row per flight: positions sessionised by aircraft and time gap
-- `flight_id`, `icao24`, `callsign`, `first_seen`, `last_seen`, `departure_airport`, `arrival_airport` (nearest-airport match)
+- One row per flight: an aircraft's positions with no gap longer than 20 minutes (Spark session windows). A flight is written once the watermark passes its end, about 35 minutes after its last position
+- `flight_id` (`icao24` plus first-seen time, so replays give the same ids), `icao24`, `callsign`, `registration`, `aircraft_type`, `first_seen`, `last_seen`, `duration_s`, `positions`, first and last position
+- `departure_airport` and `arrival_airport`: the nearest airport within 25 km and 1,500 m above it, from the first and last position; null when the flight enters or leaves the area in cruise
+- Known limit: an aircraft that lands and leaves again within 20 minutes, transponder on, shows as one flight
+- Partitioned by `first_seen` day
 
 **Gold (dbt)**
 - `gold.airport_traffic_hourly`: arrivals, departures and aircraft on ground per airport and hour
@@ -159,7 +164,9 @@ Schema: [`schemas/flight_position.v1.avsc`](schemas/flight_position.v1.avsc), BA
 - `gold.holding_patterns`: flights circling near an airport before landing
 - `gold.pipeline_freshness`: end-to-end latency from `event_time` to gold
 
-Reference data: an open airports dataset (such as OurAirports) loaded as a dbt seed.
+**Reference data:** small, rarely changing tables kept as dbt seeds in `dbt/seeds/`, with their source documented in [`dbt/seeds/README.md`](dbt/seeds/README.md).
+- `airports.csv`: an extract of [OurAirports](https://ourairports.com/data/) (public domain), with airports within the polling radius plus 20 nm. Rebuild it with `make airports` after changing the polling area, then commit the diff.
+- Silver reads the file directly for airport matching for now (the Spark containers mount `dbt/seeds/`). From Phase 3, dbt loads it as `reference.airports` and every consumer reads that table.
 
 ## Phases
 
@@ -186,9 +193,9 @@ Each phase is roughly a weekend or two and ends with something that works on its
 ### Phase 2: Streaming to Iceberg
 
 - [x] Spark job writing bronze with checkpointing
-- [ ] Silver job: deduplication, watermark for late data, rejected-rows table
-- [ ] Flight sessionisation into `silver.flights`
-- [ ] Failure test: kill and restart the job mid-stream (bronze passes; silver to do)
+- [x] Silver job: deduplication, watermark for late data, rejected-rows table
+- [x] Flight sessionisation into `silver.flights`
+- [x] Failure test: kill and restart the job mid-stream (bronze and silver)
 
 **Done when:** after a kill and restart, silver has no lost and no duplicated events compared with the recording.
 
@@ -196,8 +203,9 @@ Each phase is roughly a weekend or two and ends with something that works on its
 
 - [ ] Trino connected to the catalog
 - [ ] dbt project: gold models, tests and the airports seed
+- [ ] Airports seed as the `reference.airports` table, with dbt tests (unique code, coordinates in range, plausible elevation); silver reads the table instead of the CSV
 - [ ] Airflow DAGs: dbt run, compaction, 3-day retention with snapshot expiry, backfill
-- [ ] Dashboard on the gold tables
+- [ ] Grafana dashboard on the gold tables, through the Trino data source
 
 **Done when:** a backfill from bronze reproduces the same gold tables for the retained 3 days, and the dashboard shows live data.
 
@@ -212,17 +220,9 @@ Each phase is roughly a weekend or two and ends with something that works on its
 
 ### Phase 5: Portfolio polish
 
+- [ ] Make the repo public (decided: only after Phase 4 is done)
 - [ ] README with the architecture diagram, quick start, dashboard screenshot and benchmark results
 - [ ] Decision records: Spark vs Flink, Iceberg vs Delta, partitioning strategy, catalog choice
-- [ ] Make the repo public and pin it on my GitHub profile
-- [ ] Add a Projects entry to the CV with the measured numbers
-- [ ] LinkedIn post about the project
-
-## What it adds to the CV
-
-- **Projects section:** one entry with the numbers from Phase 4 and a link.
-- **Skills:** Spark, Kafka, Iceberg and Trino become defensible keywords, listed as project experience.
-- **Trade-offs:** the decision records answer "what did you decide and why" directly.
 
 ## Open decisions
 
@@ -230,8 +230,8 @@ Each phase is roughly a weekend or two and ends with something that works on its
 |---|---|---|
 | Data source | OpenSky, adsb.lol, Wikimedia EventStreams | **Decided: adsb.lol** ([0002](docs/decisions/0002-data-source.md)) |
 | Object store | MinIO, SeaweedFS, Garage | **Decided: SeaweedFS** ([0001](docs/decisions/0001-object-store.md)) |
-| Dashboard | Superset, Evidence | Evidence is lighter; Superset is better known |
-| Repo visibility | Private first, public later | Public once Phase 1 works |
+| Dashboard | Grafana, Superset, Evidence | **Decided: Grafana** ([0003](docs/decisions/0003-dashboard.md)) |
+| Repo visibility | Private first, public later | **Decided: public once Phase 4 is done**, so the repo goes public with its benchmark numbers |
 | Optional Kubernetes | kind with Terraform, or skip | Only after Phase 5 |
 
 ## Risks
@@ -248,5 +248,5 @@ Each phase is roughly a weekend or two and ends with something that works on its
 
 - Flink version of the streaming job, with a comparison against Spark.
 - OpenLineage with Marquez for lineage.
-- A small natural-language query agent over the gold tables, linking to my GenAI work.
+- A small natural-language query agent over the gold tables.
 - Deploy to a cloud free tier with Terraform.

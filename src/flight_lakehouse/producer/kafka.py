@@ -7,11 +7,23 @@ from typing import Any
 
 from confluent_kafka import KafkaException, Producer
 from confluent_kafka.admin import AdminClient, NewTopic
-from confluent_kafka.schema_registry import Schema, SchemaRegistryClient
+from confluent_kafka.schema_registry import (
+    Schema,
+    SchemaRegistryClient,
+    topic_subject_name_strategy,
+)
 from confluent_kafka.schema_registry.avro import AvroSerializer
 from confluent_kafka.serialization import MessageField, SerializationContext, StringSerializer
 
 from flight_lakehouse.config import POSITIONS_SCHEMA
+
+# Seconds before a schema registry request gives up and is retried. The client's
+# default is no timeout at all, so one unanswered request blocks the producer forever.
+REGISTRY_TIMEOUT_S = 10
+
+
+def registry_client(registry_url: str) -> SchemaRegistryClient:
+    return SchemaRegistryClient({"url": registry_url, "timeout": REGISTRY_TIMEOUT_S})
 
 
 def value_subject(topic: str) -> str:
@@ -45,7 +57,7 @@ def ensure_topic(bootstrap: str, topic: str, partitions: int, retention_hours: i
 
 def register_schema(registry_url: str, topic: str, compatibility: str = "BACKWARD") -> int:
     """Register the value schema and set its compatibility rule. Returns the schema id."""
-    client = SchemaRegistryClient({"url": registry_url})
+    client = registry_client(registry_url)
     subject = value_subject(topic)
     schema_id = client.register_schema(subject, Schema(load_schema(), "AVRO"))
     client.set_compatibility(subject, compatibility)
@@ -61,11 +73,16 @@ class PositionPublisher:
 
     def __init__(self, bootstrap: str, registry_url: str, topic: str):
         self.topic = topic
-        registry = SchemaRegistryClient({"url": registry_url})
         self._value = AvroSerializer(
-            registry,
+            registry_client(registry_url),
             load_schema(),
-            conf={"auto.register.schemas": False, "use.latest.version": True},
+            conf={
+                "auto.register.schemas": False,
+                "use.latest.version": True,
+                # The subject is always <topic>-value. Without this, the serializer first
+                # asks the registry for "associations", an API Apicurio doesn't implement.
+                "subject.name.strategy": topic_subject_name_strategy,
+            },
         )
         self._key = StringSerializer("utf_8")
         self._producer = Producer(

@@ -1,0 +1,31 @@
+airport_code,icao_code,iata_code,name,type,latitude,longitude,elevation_ft,municipality,iso_country
+ES-0109,,,Folgueroles Airfield,medium_airport,41.9527,2.3072,1670,Folgueroles,ES
+LEAP,LEAP,,Ampuriabrava Airfield,small_airport,42.260309,3.109619,2,Empuriabrava,ES
+LEBF,LEBF,,Binéfar Airfield,small_airport,41.853887,0.254753,1312,Binéfar,ES
+LEBL,LEBL,BCN,Josep Tarradellas Barcelona-El Prat Airport,large_airport,41.2971,2.07846,12,Barcelona,ES
+LECD,LECD,,La Cerdanya Airfield,small_airport,42.386398,1.86667,3586,Alp,ES
+LECF,LECF,,Calaf-Sallavinera Airfield,small_airport,41.744202,1.55694,2355,Sant Pere Sallavinera,ES
+LECH,LECH,CDT,Castellón-Costa Azahar Airport,medium_airport,40.213889,0.073333,1182,Castellón de la Plana,ES
+LEDA,LEDA,ILD,Lleida-Alguaire Airport,medium_airport,41.728185,0.535023,1152,Lleida,ES
+LEGE,LEGE,GRO,Girona-Costa Brava Airport,large_airport,41.904639,2.761774,468,Girona,ES
+LEHC,LEHC,HSK,Huesca-Pirineos Airport,small_airport,42.076099,-0.316667,1769,Monflorite/Alcalá del Obispo,ES
+LEIG,LEIG,,Igualada/Odena Airfield,small_airport,41.585602,1.65306,1080,Barcelona,ES
+LEIS,LEIS,,Binissalem Airfield,small_airport,39.68105,2.877281,361,Binissalem,ES
+LELL,LELL,,Sabadell Airfield,small_airport,41.520901,2.10508,485,Sabadell,ES
+LEMS,LEMS,,Manresa Airfield,small_airport,41.765301,1.86167,897,Manresa,ES
+LENA,LENA,,Benabarre Airfield,small_airport,42.0228,0.482222,2450,Huesca,ES
+LEPA,LEPA,PMI,Palma de Mallorca Airport,large_airport,39.551701,2.73881,27,Palma de Mallorca,ES
+LEPT,LEPT,,Vilafranca de Bonany-Es cruce Airfield (Aerodromo Mallorca),small_airport,39.576801,3.124647,233,Petra Pep Mercader,ES
+LERS,LERS,REU,Reus Airport,large_airport,41.147509,1.168354,233,Reus,ES
+LESB,LESB,,Son Bonet Airfield,small_airport,39.5989,2.70278,153,Marratxí,ES
+LESU,LESU,LEU,Pirineus - la Seu d'Urgel Airport,medium_airport,42.3386,1.40917,2625,La Seu d'Urgell Pyrenees and Andorra,ES
+LFCB,LFCB,,Aérodrome de Bagnères de Luchon,small_airport,42.799999,0.6,2028,,FR
+LFCG,LFCG,,Aérodrome de Saint-Girons - Antichan,medium_airport,43.007801,1.10315,1368,Saint-Girons/Antichan,FR
+LFDJ,LFDJ,,Aérodrome de Pamiers - Les Pujols,small_airport,43.090599,1.69583,1115,Pamiers/Les Pujols,FR
+LFIP,LFIP,,Altiport de Peyresourde Balestas,small_airport,42.796723,0.436503,5190,,FR
+LFMK,LFMK,CCF,Carcassonne Salvaza Airport,medium_airport,43.216,2.30632,433,Carcassonne,FR
+LFMP,LFMP,PGF,Perpignan-Rivesaltes (Llabanère) Airport,medium_airport,42.740398,2.87067,144,Perpignan/Rivesaltes,FR
+LFMZ,LFMZ,,Lézignan-Corbières Airfield,small_airport,43.1758,2.73417,207,Lézignan-Corbières,FR
+LFNQ,LFNQ,,Mont Louis La Quillane Airfield,small_airport,42.543598,2.12,5610,,FR
+LFNW,LFNW,,Puivert Airfield,small_airport,42.9114,2.05611,1608,,FR
+LFYS,LFYS,,Ste Léocadie Airfield,small_airport,42.447201,2.01083,4331,,FR

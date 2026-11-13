@@ -17,12 +17,19 @@ make smoke     # create, write and read an Iceberg table on the stack
 make up-ui     # also start the web UIs (Kafka, schema registry, SeaweedFS)
 make produce   # run the producer in this terminal instead (Ctrl+C to stop)
 make replay    # replay the recorded test data into Kafka
-make stream    # run the pipeline in the background: live producer (every 4 min) + Spark bronze job
+make airports  # rebuild the airports seed for the polling area (see dbt/seeds/README.md)
+make stream    # run the pipeline in the background: live producer (every 4 min) + Spark bronze and silver jobs
 make stream-logs  # follow both; make stream-stop stops them
-make test-stream  # kill-and-restart test for the Spark job (slow, ~1.5 min)
+make test-stream  # Spark tests: bronze kill-and-restart, silver end to end (slow, ~1.5 min)
 make down      # stop the stack (data is kept in Docker volumes)
 ```
 
 ## Data and attribution
 
 Aircraft position data comes from [adsb.lol](https://adsb.lol) under the [Open Database License (ODbL)](https://opendatacommons.org/licenses/odbl/1-0/). Recorded samples in this repo and tables derived from them are available under the same licence.
+
+Airport reference data comes from [OurAirports](https://ourairports.com/data/), which is in the public domain.
+
+## Licence
+
+The code is licensed under the [Apache License 2.0](LICENSE). Data recorded from adsb.lol stays under ODbL, as described above.

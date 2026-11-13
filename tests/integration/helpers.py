@@ -1,6 +1,20 @@
 """Connections from the host to the running stack, shared by the integration tests."""
 
+import contextlib
 import os
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+COMPOSE = [
+    "docker",
+    "compose",
+    "-f",
+    str(ROOT / "infra/compose/docker-compose.yml"),
+    "--env-file",
+    str(ROOT / ".env"),
+    "--profile",
+    "stream",
+]
 
 
 def env(name: str, default: str) -> str:
@@ -32,3 +46,32 @@ def host_catalog():
             "s3.region": "us-east-1",
         },
     )
+
+
+def spark_submit(job: str, *args: str) -> list[str]:
+    """Command that runs a streaming job (bronze or silver) in the Spark container."""
+    return [
+        "/opt/spark/bin/spark-submit",
+        "--master=local[2]",
+        "--driver-memory=1g",
+        "--conf=spark.ui.showConsoleProgress=false",
+        f"src/flight_lakehouse/streaming/{job}.py",
+        *args,
+    ]
+
+
+def table_rows(catalog, table: str):
+    """The table's rows as Arrow, or None if it doesn't exist yet."""
+    try:
+        return catalog.load_table(table).scan().to_arrow()
+    except Exception:  # noqa: BLE001 - not created yet
+        return None
+
+
+def purge_tables(catalog, *tables: str) -> None:
+    """Drop test tables and delete their files. A table the test never created is skipped."""
+    from pyiceberg.exceptions import NoSuchTableError
+
+    for table in tables:
+        with contextlib.suppress(NoSuchTableError):
+            catalog.purge_table(table)

@@ -212,6 +212,8 @@ services:
     volumes: &spark-volumes
       - ../../src:/app/src:ro
       - ../../schemas:/app/schemas:ro
+      # Reference data (the airports seed) that silver reads for airport matching.
+      - ../../dbt/seeds:/app/dbt/seeds:ro
       - spark-checkpoints:/checkpoints
     command:
       - /opt/spark/bin/spark-submit
@@ -219,6 +221,24 @@ services:
       - --driver-memory=1g
       - --conf=spark.ui.showConsoleProgress=false
       - src/flight_lakehouse/streaming/bronze.py
+    restart: unless-stopped
+
+  spark-silver:
+    image: flight-lakehouse-spark:dev
+    profiles: [stream]
+    ports:
+      - "127.0.0.1:${SPARK_SILVER_UI_HOST_PORT:-4041}:4040"
+    depends_on:
+      spark-bronze:
+        condition: service_started
+    environment: *spark-env
+    volumes: *spark-volumes
+    command:
+      - /opt/spark/bin/spark-submit
+      - --master=local[2]
+      - --driver-memory=1g
+      - --conf=spark.ui.showConsoleProgress=false
+      - src/flight_lakehouse/streaming/silver.py
     restart: unless-stopped
 
   # Optional web UIs: start with `make up-ui`.

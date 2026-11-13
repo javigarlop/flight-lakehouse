@@ -4,11 +4,9 @@ Needs the stack running and the Spark image built (make up && make spark-build).
 Slow (Spark starts twice), so it has its own marker. Run with: make test-stream
 """
 
-import contextlib
 import subprocess
 import time
 import uuid
-from pathlib import Path
 
 import pytest
 
@@ -17,39 +15,27 @@ from flight_lakehouse.producer.kafka import (
     PositionPublisher,
     ensure_topic,
     register_schema,
+    registry_client,
     value_subject,
 )
 from flight_lakehouse.replay.replay import replay
-from tests.integration.helpers import host_catalog
+from tests.integration.helpers import (
+    COMPOSE,
+    host_catalog,
+    purge_tables,
+    spark_submit,
+    table_rows,
+)
 
 pytestmark = [pytest.mark.integration, pytest.mark.spark]
 
-ROOT = Path(__file__).resolve().parents[2]
-COMPOSE = [
-    "docker",
-    "compose",
-    "-f",
-    str(ROOT / "infra/compose/docker-compose.yml"),
-    "--env-file",
-    str(ROOT / ".env"),
-    "--profile",
-    "stream",
-]
 REPLAYS = 5  # 5 x 138 positions from the fixture
 
 
 def bronze_cmd(topic: str, table: str, checkpoint: str, *extra: str) -> list[str]:
-    return [
-        "/opt/spark/bin/spark-submit",
-        "--master=local[2]",
-        "--driver-memory=1g",
-        "--conf=spark.ui.showConsoleProgress=false",
-        "src/flight_lakehouse/streaming/bronze.py",
-        f"--topic={topic}",
-        f"--table={table}",
-        f"--checkpoint={checkpoint}",
-        *extra,
-    ]
+    return spark_submit(
+        "bronze", f"--topic={topic}", f"--table={table}", f"--checkpoint={checkpoint}", *extra
+    )
 
 
 @pytest.fixture
@@ -61,7 +47,6 @@ def catalog():
 def stream_target(catalog):
     """A fresh topic filled with the fixture, plus names for a fresh table and checkpoint."""
     from confluent_kafka.admin import AdminClient
-    from confluent_kafka.schema_registry import SchemaRegistryClient
 
     settings = Settings.from_env()
     suffix = uuid.uuid4().hex[:8]
@@ -70,21 +55,12 @@ def stream_target(catalog):
     register_schema(settings.schema_registry_url, topic)
     yield settings, topic, f"test_bronze.positions_{suffix}", f"/checkpoints/test-{suffix}"
 
-    # The table may not exist if the test failed early.
-    with contextlib.suppress(Exception):
-        catalog.purge_table(f"test_bronze.positions_{suffix}")
+    purge_tables(catalog, f"test_bronze.positions_{suffix}")
     admin = AdminClient({"bootstrap.servers": settings.kafka_bootstrap})
     admin.delete_topics([topic])[topic].result(timeout=30)
-    registry = SchemaRegistryClient({"url": settings.schema_registry_url})
+    registry = registry_client(settings.schema_registry_url)
     registry.delete_subject(value_subject(topic), permanent=False)
     registry.delete_subject(value_subject(topic), permanent=True)
-
-
-def table_rows(catalog, table: str):
-    try:
-        return catalog.load_table(table).scan().to_arrow()
-    except Exception:  # noqa: BLE001 - not created yet
-        return None
 
 
 def test_kill_and_restart_loses_and_duplicates_nothing(stream_target, catalog, recording):

@@ -1,4 +1,7 @@
-"""Command-line entry point: flight-lakehouse setup | produce | replay | stream | maintain."""
+"""Command-line entry point.
+
+flight-lakehouse setup | produce | replay | stream | maintain | airports
+"""
 
 import argparse
 import logging
@@ -6,7 +9,7 @@ import sys
 from pathlib import Path
 
 from flight_lakehouse import __version__
-from flight_lakehouse.config import Settings
+from flight_lakehouse.config import AIRPORTS_CSV, Settings
 
 COMMANDS = {
     "setup": "Create the Kafka topic and register the Avro schema",
@@ -14,6 +17,7 @@ COMMANDS = {
     "replay": "Re-emit recorded data to Kafka at 1x up to max speed",
     "stream": "Run the Spark streaming jobs (bronze and silver)",
     "maintain": "Run Iceberg maintenance: compaction, snapshot expiry, backfill",
+    "airports": "Rebuild the airports reference extract for the polling area",
 }
 NOT_IMPLEMENTED = {"stream", "maintain"}
 
@@ -42,6 +46,9 @@ def build_parser() -> argparse.ArgumentParser:
     speed.add_argument("--speed", type=float, default=1.0, help="speed multiplier (default: 1)")
     speed.add_argument("--max", action="store_true", help="publish as fast as possible")
     replay.add_argument("--topic", help="publish to this topic instead of the default")
+
+    airports = commands["airports"]
+    airports.add_argument("--output", type=Path, default=AIRPORTS_CSV, help="default: the dbt seed")
     return parser
 
 
@@ -105,6 +112,14 @@ def _replay(settings: Settings, args: argparse.Namespace) -> int:
     return 0
 
 
+def _airports(settings: Settings, args: argparse.Namespace) -> int:
+    from flight_lakehouse.reference.airports import SOURCE_URL, refresh
+
+    count = refresh(args.output, settings.latitude, settings.longitude, settings.radius_nm)
+    print(f"Wrote {count} airports to {args.output} (from {SOURCE_URL})")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command in NOT_IMPLEMENTED:
@@ -120,6 +135,8 @@ def main(argv: list[str] | None = None) -> int:
         return _setup(settings)
     if args.command == "produce":
         return _produce(settings, args)
+    if args.command == "airports":
+        return _airports(settings, args)
     return _replay(settings, args)
 
 
