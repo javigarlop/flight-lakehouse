@@ -195,7 +195,7 @@ Each phase is roughly a weekend or two and ends with something that works on its
 - [x] Spark job writing bronze with checkpointing
 - [x] Silver job: deduplication, watermark for late data, rejected-rows table
 - [x] Flight sessionisation into `silver.flights`
-- [ ] Failure test: kill and restart the job mid-stream (bronze passes; silver to do)
+- [x] Failure test: kill and restart the job mid-stream (bronze and silver)
 
 **Done when:** after a kill and restart, silver has no lost and no duplicated events compared with the recording.
 

@@ -2,11 +2,14 @@
 
 Kafka -> bronze -> silver, on a fresh topic and fresh tables. Both jobs run with --once,
 twice: the second round resumes from the checkpoints and closes the flights.
+A second test kills the silver job mid-stream and checks the restart loses and
+duplicates nothing.
 Needs the stack running and the Spark image built (make up && make spark-build).
 Run with: make test-stream
 """
 
 import subprocess
+import time
 import uuid
 from collections import Counter, defaultdict
 from datetime import UTC, datetime
@@ -86,29 +89,42 @@ def run_job(*command: str) -> None:
     assert result.returncode == 0, result.stderr[-3000:]
 
 
-def run_pipeline(topic: str, tables: dict[str, str], checkpoint: str) -> None:
+def bronze_args(topic: str, tables: dict[str, str], checkpoint: str, *extra: str) -> list[str]:
+    return spark_submit(
+        "bronze",
+        f"--topic={topic}",
+        f"--table=lakehouse.{tables['bronze']}",
+        f"--checkpoint={checkpoint}/bronze",
+        *extra,
+    )
+
+
+def silver_args(tables: dict[str, str], checkpoint: str, *extra: str) -> list[str]:
     spark = {name: f"lakehouse.{table}" for name, table in tables.items()}
-    run_job(
-        *spark_submit(
-            "bronze",
-            f"--topic={topic}",
-            f"--table={spark['bronze']}",
-            f"--checkpoint={checkpoint}/bronze",
-            "--once",
-        )
+    return spark_submit(
+        "silver",
+        f"--source={spark['bronze']}",
+        f"--positions-table={spark['positions']}",
+        f"--rejected-table={spark['rejected']}",
+        f"--flights-table={spark['flights']}",
+        f"--checkpoint-dir={checkpoint}",
+        *extra,
     )
-    run_job(
-        *spark_submit(
-            "silver",
-            f"--source={spark['bronze']}",
-            f"--positions-table={spark['positions']}",
-            f"--rejected-table={spark['rejected']}",
-            f"--flights-table={spark['flights']}",
-            f"--checkpoint-dir={checkpoint}",
-            "--once",
-            "--max-files=2",  # several micro-batches, so state has to carry across them
+
+
+def run_pipeline(topic: str, tables: dict[str, str], checkpoint: str) -> None:
+    run_job(*bronze_args(topic, tables, checkpoint, "--once"))
+    # Several micro-batches, so state has to carry across them.
+    run_job(*silver_args(tables, checkpoint, "--once", "--max-files=2"))
+
+
+def position_keys(positions) -> list[tuple[str, int]]:
+    return [
+        (icao24, int(event_time.timestamp() * 1000))
+        for icao24, event_time in zip(
+            positions["icao24"].to_pylist(), positions["event_time"].to_pylist(), strict=True
         )
-    )
+    ]
 
 
 def flight_id(icao24: str, event_time_ms: int) -> str:
@@ -131,13 +147,7 @@ def test_silver_deduplicates_rejects_and_sessionises(pipeline, catalog, recordin
 
     run_pipeline(topic, tables, checkpoint)
 
-    positions = table_rows(catalog, tables["positions"])
-    keys = [
-        (icao24, int(event_time.timestamp() * 1000))
-        for icao24, event_time in zip(
-            positions["icao24"].to_pylist(), positions["event_time"].to_pylist(), strict=True
-        )
-    ]
+    keys = position_keys(table_rows(catalog, tables["positions"]))
     duplicated = [key for key, count in Counter(keys).items() if count > 1]
     assert not duplicated, f"{len(duplicated)} positions written more than once"
     assert set(keys) == expected
@@ -171,3 +181,55 @@ def test_silver_deduplicates_rejects_and_sessionises(pipeline, catalog, recordin
     # Aircraft on the ground at Barcelona for the whole recording.
     parked = {f["icao24"] for f in rows if f["departure_airport"] == f["arrival_airport"] == "LEBL"}
     assert {"344045", "344156", "3c6655"} <= parked
+
+
+def test_silver_kill_and_restart_loses_and_duplicates_nothing(pipeline, catalog, recording):
+    settings, topic, tables, checkpoint = pipeline
+    publisher = PositionPublisher(settings.kafka_bootstrap, settings.schema_registry_url, topic)
+    for _ in range(REPLAYS):
+        replay(recording, publisher, speed=None)
+    fixture = [p for response in read_recording(recording) for p in to_positions(response)]
+    expected = {(p["icao24"], p["event_time"]) for p in fixture}
+    # Small bronze batches give silver many files, so it is still mid-stream when killed.
+    run_job(*bronze_args(topic, tables, checkpoint, "--once", "--max-offsets=60"))
+
+    # 1. Continuous silver job, one bronze file per micro-batch.
+    name = f"silver-test-{uuid.uuid4().hex[:8]}"
+    subprocess.run(
+        [*COMPOSE, "run", "-d", "--name", name, "spark-bronze"]
+        + silver_args(tables, checkpoint, "--trigger-seconds=2", "--max-files=1"),
+        check=True,
+        capture_output=True,
+    )
+    try:
+        deadline = time.time() + 180
+        while True:
+            rows = table_rows(catalog, tables["positions"])
+            if rows is not None and rows.num_rows > 0:
+                break
+            assert time.time() < deadline, "silver job wrote nothing within 3 minutes"
+            time.sleep(1)
+        # 2. Kill without warning: no graceful shutdown, like a crash.
+        subprocess.run(["docker", "kill", name], check=True, capture_output=True)
+    finally:
+        subprocess.run(["docker", "rm", "-f", name], check=False, capture_output=True)
+
+    written_before_kill = len(set(position_keys(table_rows(catalog, tables["positions"]))))
+    assert 0 < written_before_kill < len(expected), "kill should land mid-stream"
+
+    # 3. Restart from the same checkpoints, with one aircraft seen two hours later so the
+    # watermark passes every fixture flight and they close.
+    later = {**fixture[0], "icao24": "ffffff", "callsign": "CLOCK"}
+    later["event_time"] = later["received_at"] = max(p["event_time"] for p in fixture) + 7_200_000
+    publisher.publish([later])
+    publisher.flush()
+    run_pipeline(topic, tables, checkpoint)
+
+    keys = position_keys(table_rows(catalog, tables["positions"]))
+    duplicated = [key for key, count in Counter(keys).items() if count > 1]
+    assert not duplicated, f"{len(duplicated)} positions written more than once"
+    assert set(keys) == expected | {(later["icao24"], later["event_time"])}
+
+    flight_ids = table_rows(catalog, tables["flights"])["flight_id"].to_pylist()
+    assert len(flight_ids) == len(set(flight_ids)), "a flight was written twice"
+    assert len(flight_ids) == len({p["icao24"] for p in fixture})
