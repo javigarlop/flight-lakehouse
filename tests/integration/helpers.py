@@ -75,3 +75,16 @@ def purge_tables(catalog, *tables: str) -> None:
     for table in tables:
         with contextlib.suppress(NoSuchTableError):
             catalog.purge_table(table)
+
+
+def trino_cursor():
+    """DB-API cursor on Trino's `lakehouse` catalog, through the host port."""
+    import trino
+
+    connection = trino.dbapi.connect(
+        host="localhost",
+        port=int(env("TRINO_HOST_PORT", "8080")),
+        user="tests",
+        catalog="lakehouse",
+    )
+    return connection.cursor()

@@ -2,7 +2,7 @@
 -include .env
 COMPOSE := docker compose -f infra/compose/docker-compose.yml --env-file .env
 
-.PHONY: help install lint format test cov diff-cov audit check smoke test-stream up up-ui down logs setup produce replay airports spark-build stream stream-logs stream-stop
+.PHONY: help install lint lint-sql duplication format test cov diff-cov audit check smoke test-stream test-trino up up-ui down logs setup produce replay airports spark-build stream stream-logs stream-stop trino
 
 help: ## Show available targets
 	@grep -E '^[a-z-]+:.*## ' $(firstword $(MAKEFILE_LIST)) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -14,6 +14,12 @@ lint: ## Check code style and lint rules
 	uv run ruff check .
 	uv run ruff format --check .
 	uv run mypy
+
+lint-sql: ## Lint the dbt SQL models with sqlfluff
+	uv run sqlfluff lint dbt
+
+duplication: ## Check for copy-pasted code with jscpd (fails above 3%; needs Node)
+	npx --yes jscpd@5.4.2 --config .jscpd.json --no-tips
 
 format: ## Apply formatting and safe lint fixes
 	uv run ruff check --fix .
@@ -33,13 +39,16 @@ audit: ## Check dependencies for known vulnerabilities and the repo for secrets
 	uv export --format requirements-txt --no-emit-project --no-dev -q | uvx pip-audit -r /dev/stdin --disable-pip --require-hashes
 	gitleaks git --no-banner .
 
-check: lint cov audit ## Run every quality check CI runs (except Dockerfile lint)
+check: lint lint-sql duplication cov audit ## Run every quality check (CI also runs Dockerfile lint)
 
-smoke: .env ## Run the integration tests against the running stack (not Spark)
-	uv run --env-file .env pytest -m "integration and not spark"
+smoke: .env ## Run the integration tests against the running stack (not Spark or Trino)
+	uv run --env-file .env pytest -m "integration and not spark and not trino"
 
 test-stream: .env ## Run the Spark streaming tests (slow; needs make up and make spark-build)
 	uv run --env-file .env pytest -m spark
+
+test-trino: .env ## Run the Trino integration tests (needs make trino)
+	uv run --env-file .env pytest -m trino
 
 up: .env ## Start the local stack and wait until it is ready
 	$(COMPOSE) up -d --wait kafka schema-registry seaweedfs polaris
@@ -74,6 +83,10 @@ stream: up ## Start the pipeline in the background: live producer + Spark bronze
 	@echo "Spark UI (bronze): http://localhost:$(or $(SPARK_UI_HOST_PORT),4040)"
 	@echo "Spark UI (silver): http://localhost:$(or $(SPARK_SILVER_UI_HOST_PORT),4041)"
 
+trino: up ## Start Trino on the stack's Iceberg catalog (about 1.5 GB of RAM)
+	$(COMPOSE) --profile query up -d --wait trino
+	@echo "Trino: http://localhost:$(or $(TRINO_HOST_PORT),8080) (catalog lakehouse)"
+
 stream-logs: ## Follow the producer and Spark logs
 	$(COMPOSE) --profile stream logs -f producer spark-bronze spark-silver
 
@@ -83,8 +96,8 @@ stream-stop: ## Stop the producer and Spark jobs (the rest of the stack keeps ru
 logs: ## Follow the stack's logs
 	$(COMPOSE) logs -f
 
-down: ## Stop the local stack, including the web UIs and Spark
-	$(COMPOSE) --profile ui --profile stream down
+down: ## Stop the local stack, including the web UIs, Spark and Trino
+	$(COMPOSE) --profile ui --profile stream --profile query down
 
 .env:
 	cp .env.example .env

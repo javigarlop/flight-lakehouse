@@ -6,12 +6,13 @@ Work in progress. See [PLAN.md](PLAN.md) for the build plan and [docs/decisions/
 
 ## Quick start
 
-Requires Python 3.12, [uv](https://docs.astral.sh/uv/) and Docker.
+Requires Python 3.12, [uv](https://docs.astral.sh/uv/) and Docker. `make duplication` also needs Node.
 
 ```sh
 make install   # install dependencies
 make test      # run unit tests
 make lint      # ruff checks
+make check     # every quality check: lint, SQL lint (sqlfluff), duplication (jscpd), coverage, audit
 make up        # start Kafka, Apicurio, SeaweedFS, Polaris and its Postgres
 make smoke     # create, write and read an Iceberg table on the stack
 make up-ui     # also start the web UIs (Kafka, schema registry, SeaweedFS)
@@ -21,6 +22,8 @@ make airports  # rebuild the airports seed for the polling area (see dbt/seeds/R
 make stream    # run the pipeline in the background: live producer (every 4 min) + Spark bronze and silver jobs
 make stream-logs  # follow both; make stream-stop stops them
 make test-stream  # Spark tests: bronze kill-and-restart, silver end to end (slow, ~1.5 min)
+make trino     # start Trino on the Iceberg catalog (catalog lakehouse, port 8080)
+make test-trino   # read and write Iceberg tables through Trino
 make down      # stop the stack (data is kept in Docker volumes)
 ```
 

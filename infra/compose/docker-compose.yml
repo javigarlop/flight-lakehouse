@@ -1,5 +1,5 @@
-# Local stack: Kafka, Apicurio Registry, SeaweedFS (S3) and Polaris (Iceberg REST catalog,
-# with its state in Postgres so tables survive restarts).
+# Local stack: Kafka, Apicurio Registry, SeaweedFS (S3), Polaris (Iceberg REST catalog,
+# with its state in Postgres so tables survive restarts) and Trino.
 # Start with `make up` from the repo root; credentials come from .env.
 
 name: flight-lakehouse
@@ -161,6 +161,28 @@ services:
       - ./polaris/init.sh:/init.sh:ro
     entrypoint: ["/bin/sh", "/init.sh"]
     restart: "no"
+
+  # SQL over the Iceberg tables, for dbt and Grafana: start with `make trino`.
+  trino:
+    image: trinodb/trino:484
+    profiles: [query]
+    depends_on:
+      polaris:
+        condition: service_healthy
+      seaweedfs:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${TRINO_HOST_PORT:-8080}:8080"
+    # The image sizes the JVM heap at 80% of this, so 1.5 GB gives about 1.2 GB of heap.
+    mem_limit: 1536m
+    environment:
+      POLARIS_CATALOG: ${POLARIS_CATALOG}
+      POLARIS_CLIENT_ID: ${POLARIS_CLIENT_ID}
+      POLARIS_CLIENT_SECRET: ${POLARIS_CLIENT_SECRET}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+    volumes:
+      - ./trino/catalog:/etc/trino/catalog:ro
 
   # Live ingestion: polls adsb.lol every 4 minutes (360 of the 500 daily requests)
   # and publishes to Kafka. Raw responses are also saved to data/recordings/.

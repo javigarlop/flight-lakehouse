@@ -1,0 +1,9 @@
+# SQL lint for the dbt models (make lint-sql). The jinja templater with dbt builtins
+# stubs ref(), source() and config(), so linting needs no dbt profile or running Trino.
+[sqlfluff]
+dialect = trino
+templater = jinja
+max_line_length = 100
+
+[sqlfluff:templater:jinja]
+apply_dbt_builtins = True

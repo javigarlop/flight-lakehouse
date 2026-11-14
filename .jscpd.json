@@ -1,0 +1,9 @@
+{
+  "path": ["src", "tests", "dbt", "dags"],
+  "format": ["python", "sql"],
+  "minLines": 6,
+  "minTokens": 60,
+  "threshold": 3,
+  "reporters": ["console"],
+  "gitignore": true
+}
