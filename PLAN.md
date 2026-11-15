@@ -201,8 +201,8 @@ Each phase is roughly a weekend or two and ends with something that works on its
 
 ### Phase 3: Gold and orchestration
 
-- [ ] Trino connected to the catalog
-- [ ] dbt project: gold models, tests and the airports seed
+- [x] Trino connected to the catalog
+- [x] dbt project: gold models, tests and the airports seed
 - [ ] Airports seed as the `reference.airports` table, with dbt tests (unique code, coordinates in range, plausible elevation); silver reads the table instead of the CSV
 - [ ] Airflow DAGs: dbt run, compaction, 3-day retention with snapshot expiry, backfill
 - [ ] Grafana dashboard on the gold tables, through the Trino data source

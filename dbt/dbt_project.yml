@@ -1,0 +1,42 @@
+# Gold models and reference data, built through Trino on the Polaris catalog.
+# Run from the repo root: make dbt-build (needs make trino).
+name: flight_lakehouse
+version: "0.1.0"
+profile: flight_lakehouse
+
+model-paths: [models]
+seed-paths: [seeds]
+macro-paths: [macros]
+test-paths: [tests]
+clean-targets: [target, logs]
+
+vars:
+  # Hours of silver each incremental run recomputes. Flights reach silver about 35 minutes
+  # after their last position, so a day is plenty. A backfill sets it to 72 (silver's
+  # retention) to rebuild every bucket silver still holds.
+  lookback_hours: 24
+
+models:
+  flight_lakehouse:
+    gold:
+      +schema: gold
+      +materialized: incremental
+      +incremental_strategy: merge
+      # Gold outlives silver's 3-day retention, so a full refresh would lose history.
+      +full_refresh: false
+
+seeds:
+  flight_lakehouse:
+    +schema: reference
+    airports:
+      +column_types:
+        airport_code: varchar
+        icao_code: varchar
+        iata_code: varchar
+        name: varchar
+        type: varchar
+        latitude: double
+        longitude: double
+        elevation_ft: integer
+        municipality: varchar
+        iso_country: varchar

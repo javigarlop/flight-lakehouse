@@ -1,0 +1,16 @@
+version: 2
+
+sources:
+  - name: silver
+    description: Written by the Spark silver job (src/flight_lakehouse/streaming/silver.py).
+    schema: silver
+    tables:
+      - name: flight_positions
+        description: Validated positions, deduplicated on (icao24, event_time).
+        loaded_at_field: event_time
+        config:
+          freshness:
+            warn_after: {count: 15, period: minute}
+            error_after: {count: 1, period: hour}
+      - name: flights
+        description: One row per flight, from session windows over flight_positions.

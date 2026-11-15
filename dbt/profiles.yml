@@ -1,0 +1,14 @@
+# Trino from the host. No secrets: Trino runs without authentication on 127.0.0.1.
+flight_lakehouse:
+  target: local
+  outputs:
+    local:
+      type: trino
+      method: none
+      user: dbt
+      http_scheme: http
+      host: "{{ env_var('TRINO_HOST', 'localhost') }}"
+      port: "{{ env_var('TRINO_HOST_PORT', '8080') | int }}"
+      database: lakehouse
+      schema: gold
+      threads: 2

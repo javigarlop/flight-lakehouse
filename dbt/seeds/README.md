@@ -1,8 +1,9 @@
 # Seeds: reference data
 
 Small, rarely changing reference tables, kept as CSV so changes show up in review.
-dbt loads them as seeds (Phase 3). Until then, the Spark jobs read the files directly:
-the Spark containers mount this folder at `/app/dbt/seeds`.
+`make dbt-build` loads them as tables in the `reference` schema, such as
+`lakehouse.reference.airports`, and tests them (`airports.yml`). The Spark silver job
+still reads the CSV directly: the Spark containers mount this folder at `/app/dbt/seeds`.
 
 ## `airports.csv`
 
@@ -26,4 +27,4 @@ make airports
 ```
 
 Then review the diff and commit it. The commit date is the extract's date. A restart of
-the silver job picks up the new file.
+the silver job picks up the new file, and the next `make dbt-build` reloads the table.

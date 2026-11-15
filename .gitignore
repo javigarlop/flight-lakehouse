@@ -22,6 +22,12 @@ metastore_db/
 derby.log
 /data/
 
+# dbt
+dbt/target/
+dbt/logs/
+dbt/dbt_packages/
+dbt/.user.yml
+
 # OS and editors
 .DS_Store
 .idea/

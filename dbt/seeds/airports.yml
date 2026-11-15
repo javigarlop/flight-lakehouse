@@ -1,0 +1,26 @@
+version: 2
+
+seeds:
+  - name: airports
+    description: >
+      OurAirports extract (public domain) around the polling area, loaded as
+      reference.airports. See README.md in this folder for how to rebuild it.
+    columns:
+      - name: airport_code
+        description: ICAO code, or OurAirports' own id when the airport has none.
+        data_tests: [unique, not_null]
+      - name: name
+        data_tests: [not_null]
+      - name: latitude
+        data_tests:
+          - not_null
+          - in_range: {arguments: {min_value: -90, max_value: 90}}
+      - name: longitude
+        data_tests:
+          - not_null
+          - in_range: {arguments: {min_value: -180, max_value: 180}}
+      - name: elevation_ft
+        description: Null when OurAirports has no elevation.
+        data_tests:
+          # From the Dead Sea (about -1,400 ft) to the highest airports (about 14,500 ft).
+          - in_range: {arguments: {min_value: -1500, max_value: 15000}}

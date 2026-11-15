@@ -24,6 +24,8 @@ make stream-logs  # follow both; make stream-stop stops them
 make test-stream  # Spark tests: bronze kill-and-restart, silver end to end (slow, ~1.5 min)
 make trino     # start Trino on the Iceberg catalog (catalog lakehouse, port 8080)
 make test-trino   # read and write Iceberg tables through Trino
+make dbt-build    # load reference.airports, build the gold tables and run the dbt tests (needs make trino)
+make dbt-backfill # rebuild every gold bucket silver still holds (3 days)
 make down      # stop the stack (data is kept in Docker volumes)
 ```
 

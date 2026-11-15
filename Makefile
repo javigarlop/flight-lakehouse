@@ -2,7 +2,7 @@
 -include .env
 COMPOSE := docker compose -f infra/compose/docker-compose.yml --env-file .env
 
-.PHONY: help install lint lint-sql duplication format test cov diff-cov audit check smoke test-stream test-trino up up-ui down logs setup produce replay airports spark-build stream stream-logs stream-stop trino
+.PHONY: help install lint lint-sql duplication format test cov diff-cov audit check smoke test-stream test-trino up up-ui down logs setup produce replay airports spark-build stream stream-logs stream-stop trino dbt-build dbt-backfill
 
 help: ## Show available targets
 	@grep -E '^[a-z-]+:.*## ' $(firstword $(MAKEFILE_LIST)) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -86,6 +86,15 @@ stream: up ## Start the pipeline in the background: live producer + Spark bronze
 trino: up ## Start Trino on the stack's Iceberg catalog (about 1.5 GB of RAM)
 	$(COMPOSE) --profile query up -d --wait trino
 	@echo "Trino: http://localhost:$(or $(TRINO_HOST_PORT),8080) (catalog lakehouse)"
+
+DBT := uv run --env-file .env dbt --no-version-check
+DBT_DIRS := --project-dir dbt --profiles-dir dbt
+
+dbt-build: ## Load the seeds, build the gold models and run the dbt tests (needs make trino)
+	$(DBT) build $(DBT_DIRS)
+
+dbt-backfill: ## Rebuild every gold bucket silver still holds (its 3-day retention)
+	$(DBT) build $(DBT_DIRS) --vars '{lookback_hours: 72}'
 
 stream-logs: ## Follow the producer and Spark logs
 	$(COMPOSE) --profile stream logs -f producer spark-bronze spark-silver

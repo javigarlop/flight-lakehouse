@@ -1,0 +1,63 @@
+version: 2
+
+models:
+  - name: airport_traffic_hourly
+    description: Arrivals, departures and aircraft on the ground per airport and hour (UTC).
+    data_tests:
+      - unique_combination: {arguments: {columns: [airport_code, hour_start]}}
+    columns:
+      - name: airport_code
+        data_tests:
+          - not_null
+          - relationships: {arguments: {to: ref('airports'), field: airport_code}}
+      - name: hour_start
+        description: Start of the hour, UTC.
+        data_tests: [not_null]
+      - name: departures
+        data_tests: [not_null, {in_range: {arguments: {min_value: 0, max_value: 1000}}}]
+      - name: arrivals
+        data_tests: [not_null, {in_range: {arguments: {min_value: 0, max_value: 1000}}}]
+      - name: aircraft_on_ground
+        data_tests: [not_null, {in_range: {arguments: {min_value: 0, max_value: 1000}}}]
+
+  - name: route_stats_daily
+    description: >
+      Flights and duration per route and day (UTC). A null airport means that end of the
+      route is outside the polling area; the duration is then the time spent inside it.
+    data_tests:
+      - unique_combination: {arguments: {columns: [flight_date, route]}}
+    columns:
+      - name: flight_date
+        data_tests: [not_null]
+      - name: route
+        data_tests: [not_null]
+      - name: departure_airport
+        data_tests:
+          - relationships: {arguments: {to: ref('airports'), field: airport_code}}
+      - name: arrival_airport
+        data_tests:
+          - relationships: {arguments: {to: ref('airports'), field: airport_code}}
+      - name: flights
+        data_tests: [not_null, {in_range: {arguments: {min_value: 1, max_value: 100000}}}]
+      - name: median_duration_s
+        data_tests: [not_null, {in_range: {arguments: {min_value: 0, max_value: 86400}}}]
+
+  - name: holding_patterns
+    description: Flights that circled at least once near their arrival airport before landing.
+    columns:
+      - name: flight_id
+        data_tests: [unique, not_null]
+      - name: airport_code
+        data_tests:
+          - not_null
+          - relationships: {arguments: {to: ref('airports'), field: airport_code}}
+      - name: laps
+        data_tests: [not_null, {in_range: {arguments: {min_value: 1, max_value: 100}}}]
+
+  - name: pipeline_freshness
+    description: One row per dbt run with the age of the newest data and the ingest latency.
+    columns:
+      - name: measured_at
+        data_tests: [unique, not_null]
+      - name: event_to_gold_s
+        data_tests: [not_null]
