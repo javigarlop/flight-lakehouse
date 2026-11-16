@@ -52,3 +52,9 @@ def test_server_error_raises():
     client, _ = client_returning(503)
     with pytest.raises(httpx.HTTPStatusError):
         client.point(41.297, 2.078, 100)
+
+
+def test_close_closes_the_http_client():
+    client, _ = client_returning(200)
+    client.close()
+    assert client._http.is_closed

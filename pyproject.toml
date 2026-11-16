@@ -76,8 +76,9 @@ source = ["flight_lakehouse"]
 branch = true
 
 [tool.coverage.report]
-# The Spark modules are only exercised by the Docker tests (make test-stream).
-fail_under = 70
+# The Spark jobs' wiring is unit tested with a mocked session; the Docker tests
+# (make test-stream) cover them end to end.
+fail_under = 95
 show_missing = true
 skip_empty = true
 

@@ -47,3 +47,10 @@ def test_two_replays_publish_identical_records(recording):
 def test_invalid_speed(recording, publisher):
     with pytest.raises(ValueError, match="speed must be positive"):
         replay(recording, publisher, speed=0)
+
+
+def test_blank_lines_are_skipped(recording, tmp_path):
+    lines = recording.read_text().splitlines()
+    padded = tmp_path / "padded.jsonl"
+    padded.write_text("\n".join([lines[0], "", "   ", *lines[1:], ""]) + "\n")
+    assert list(read_recording(padded)) == list(read_recording(recording))
