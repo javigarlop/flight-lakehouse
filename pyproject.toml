@@ -20,7 +20,7 @@ dev = [
     "diff-cover>=11.0.1",
     "mypy>=2.4.1",
     "pyiceberg[pyarrow]>=0.9",
-    "pyspark==4.1.4",
+    "pyspark==4.3.0",
     "pytest>=8",
     "pytest-cov>=7.1.0",
     "ruff>=0.6",
