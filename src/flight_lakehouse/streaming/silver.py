@@ -16,7 +16,8 @@ numRowsDroppedByWatermark in the query progress. Bronze still holds them, so
 a backfill can recover them.
 
 A third query reads silver.flight_positions and sessionises it into silver.flights
-(see flights.py).
+(see flights.py). It matches airports from reference.airports, which make dbt-seed
+loads; the job waits for that table, like it waits for bronze.
 
 Each streaming query has its own checkpoint. Iceberg's sink skips a micro-batch it
 already committed, so a restart neither loses nor duplicates rows.
@@ -35,7 +36,7 @@ from pyspark.sql import functions as F
 from pyspark.sql.streaming import StreamingQuery
 
 from flight_lakehouse.streaming.bronze import TABLE as BRONZE_TABLE
-from flight_lakehouse.streaming.flights import load_airports, sessionise
+from flight_lakehouse.streaming.flights import AIRPORTS_TABLE, load_airports, sessionise
 from flight_lakehouse.streaming.session import CATALOG, build_session
 from flight_lakehouse.streaming.tables import ensure_table
 
@@ -144,13 +145,15 @@ def read_table(spark: SparkSession, table: str, max_files: int) -> DataFrame:
     )
 
 
-def wait_for_table(spark: SparkSession, table: str, timeout_s: float = 600) -> None:
-    """Bronze creates its table on first start; the two jobs may start together."""
+def wait_for_table(
+    spark: SparkSession, table: str, timeout_s: float = 600, created_by: str = "bronze"
+) -> None:
+    """Wait for a table another process creates, such as bronze, which may start with us."""
     deadline = time.monotonic() + timeout_s
     while not spark.catalog.tableExists(table):
         if time.monotonic() > deadline:
             raise TimeoutError(f"{table} doesn't exist after {timeout_s:.0f} s")
-        log.info("Waiting for %s to be created", table)
+        log.info("Waiting for %s to be created by %s", table, created_by)
         time.sleep(10)
 
 
@@ -177,6 +180,7 @@ def run(
     positions_table: str,
     rejected_table: str,
     flights_table: str,
+    airports_table: str,
     checkpoint_dir: str,
     once: bool,
     trigger_s: int,
@@ -197,8 +201,12 @@ def run(
         ensure_table(spark, table, rows.schema, day_column)
         queries.append(start(rows, table, f"{checkpoint_dir}/{table}", once, trigger_s))
 
+    wait_for_table(spark, airports_table, created_by="make dbt-seed")
     flights = sessionise(
-        read_table(spark, positions_table, max_files), session_gap, watermark, load_airports()
+        read_table(spark, positions_table, max_files),
+        session_gap,
+        watermark,
+        load_airports(spark, airports_table),
     )
     ensure_table(spark, flights_table, flights.schema, "first_seen")
     flights_checkpoint = f"{checkpoint_dir}/{flights_table}"
@@ -221,6 +229,7 @@ def main() -> None:
     parser.add_argument("--positions-table", default=POSITIONS_TABLE)
     parser.add_argument("--rejected-table", default=REJECTED_TABLE)
     parser.add_argument("--flights-table", default=FLIGHTS_TABLE)
+    parser.add_argument("--airports-table", default=AIRPORTS_TABLE, help="loaded by dbt")
     parser.add_argument(
         "--checkpoint-dir",
         default=os.environ.get("CHECKPOINT_DIR", "/checkpoints"),
@@ -253,6 +262,7 @@ def main() -> None:
         args.positions_table,
         args.rejected_table,
         args.flights_table,
+        args.airports_table,
         args.checkpoint_dir,
         args.once,
         args.trigger_seconds,

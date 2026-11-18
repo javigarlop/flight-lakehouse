@@ -23,6 +23,7 @@ from pyspark.sql.types import (  # noqa: E402
 )
 
 from flight_lakehouse.streaming import silver  # noqa: E402
+from flight_lakehouse.streaming.flights import Airport  # noqa: E402
 from flight_lakehouse.streaming.tables import ensure_table  # noqa: E402
 
 # The columns bronze.decode produces, in the same order.
@@ -263,14 +264,30 @@ def test_wait_for_table_gives_up(monkeypatch):
         silver.wait_for_table(spark, "lakehouse.bronze.t", timeout_s=10)
 
 
+def test_wait_for_table_says_what_creates_it(monkeypatch, caplog):
+    monkeypatch.setattr(silver.time, "sleep", lambda _s: None)
+    spark = MagicMock()
+    spark.catalog.tableExists.side_effect = [False, True]
+
+    with caplog.at_level("INFO"):
+        silver.wait_for_table(spark, "lakehouse.reference.airports", created_by="make dbt-seed")
+
+    assert "lakehouse.reference.airports to be created by make dbt-seed" in caplog.text
+
+
 @pytest.fixture
 def job(spark, monkeypatch):
     """silver.run with the session, table creation and queries replaced by mocks."""
     session = MagicMock()
-    tables, started, read = [], [], []
+    tables, started, read, waited = [], [], [], []
     bronze = spark.createDataFrame([], BRONZE_SCHEMA)
     monkeypatch.setattr(silver, "build_session", lambda _name: session)
-    monkeypatch.setattr(silver, "wait_for_table", lambda _spark, _table: None)
+    monkeypatch.setattr(
+        silver, "wait_for_table", lambda _spark, table, **_kwargs: waited.append(table)
+    )
+    monkeypatch.setattr(
+        silver, "load_airports", lambda _spark, table: [Airport(table, 41.3, 2.08, 4.0)]
+    )
 
     def read_table(_spark, table, _max_files):
         read.append(table)
@@ -293,6 +310,7 @@ def job(spark, monkeypatch):
             "p",
             "r",
             "f",
+            "a",
             "/cp",
             once=once,
             trigger_s=30,
@@ -301,13 +319,14 @@ def job(spark, monkeypatch):
             session_gap="20 minutes",
         )
 
-    return run, session, tables, started, read
+    return run, session, tables, started, read, waited
 
 
 def test_run_once_starts_flights_after_positions(job):
-    run, session, tables, started, read = job
+    run, session, tables, started, read, waited = job
     run(once=True)
 
+    assert waited == ["b", "a"]  # bronze, and the airports dbt loads
     assert read == ["b", "p"]  # flights read the positions table
     assert tables == [("p", "event_time"), ("r", "ingested_at"), ("f", "first_seen")]
     assert started == [("p", "/cp/p", True), ("r", "/cp/r", True), ("f", "/cp/f", True)]
@@ -315,7 +334,7 @@ def test_run_once_starts_flights_after_positions(job):
 
 
 def test_run_continuous_runs_all_queries_until_one_stops(job):
-    run, session, _tables, started, _read = job
+    run, session, _tables, started, _read, _waited = job
     run(once=False)
 
     assert [table for table, _cp, _once in started] == ["p", "r", "f"]
@@ -346,6 +365,7 @@ def test_main_passes_arguments_to_run(monkeypatch):
             silver.POSITIONS_TABLE,
             silver.REJECTED_TABLE,
             silver.FLIGHTS_TABLE,
+            silver.AIRPORTS_TABLE,
             "/cp",
             True,
             30,

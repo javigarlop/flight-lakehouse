@@ -6,24 +6,24 @@ flight in state and emit it once the event_time watermark passes its end, so a f
 appears about gap + watermark after its last position.
 
 Departure and arrival airports come from the first and last positions. A flight is
-matched to the nearest airport in the airports seed (dbt/seeds/airports.csv) when
-that position is close to it and low above it. Otherwise the airport is null. That
-covers flights that enter or leave the polling area in cruise, and take-offs the
-4-minute polling only caught higher up.
+matched to the nearest airport in reference.airports (the dbt seed, loaded by
+make dbt-seed) when that position is close to it and low above it. Otherwise the
+airport is null. That covers flights that enter or leave the polling area in cruise,
+and take-offs the 4-minute polling only caught higher up.
 
 Known limit: an aircraft that lands and leaves again within the gap, with its
 transponder on, merges both legs into one flight.
 """
 
-import csv
 import math
 from dataclasses import dataclass
-from pathlib import Path
 
-from pyspark.sql import Column, DataFrame
+from pyspark.sql import Column, DataFrame, SparkSession
 from pyspark.sql import functions as F
 
-from flight_lakehouse.config import AIRPORTS_CSV
+from flight_lakehouse.streaming.session import CATALOG
+
+AIRPORTS_TABLE = f"{CATALOG}.reference.airports"
 
 FEET_TO_M = 0.3048
 EARTH_RADIUS_KM = 6371.0088
@@ -42,18 +42,25 @@ class Airport:
     elevation_m: float
 
 
-def load_airports(path: Path = AIRPORTS_CSV) -> list[Airport]:
-    """Airports from the OurAirports extract (public domain), around the polling area."""
-    with path.open(newline="") as f:
-        return [
-            Airport(
-                code=row["airport_code"],
-                latitude=float(row["latitude"]),
-                longitude=float(row["longitude"]),
-                elevation_m=float(row["elevation_ft"] or 0) * FEET_TO_M,
-            )
-            for row in csv.DictReader(f)
-        ]
+def load_airports(spark: SparkSession, table: str = AIRPORTS_TABLE) -> list[Airport]:
+    """Airports around the polling area, from the OurAirports extract (public domain).
+
+    Read once, when the job starts: the airports become constants in the flights query,
+    so a restart picks up a reloaded table.
+    """
+    rows = spark.table(table).select("airport_code", "latitude", "longitude", "elevation_ft")
+    airports = [
+        Airport(
+            code=row["airport_code"],
+            latitude=row["latitude"],
+            longitude=row["longitude"],
+            elevation_m=(row["elevation_ft"] or 0) * FEET_TO_M,
+        )
+        for row in rows.collect()
+    ]
+    if not airports:
+        raise ValueError(f"{table} is empty; load it with make dbt-seed")
+    return airports
 
 
 def distance_km(latitude: Column, longitude: Column, airport: Airport) -> Column:

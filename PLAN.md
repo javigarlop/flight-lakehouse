@@ -166,7 +166,7 @@ Schema: [`schemas/flight_position.v1.avsc`](schemas/flight_position.v1.avsc), BA
 
 **Reference data:** small, rarely changing tables kept as dbt seeds in `dbt/seeds/`, with their source documented in [`dbt/seeds/README.md`](dbt/seeds/README.md).
 - `airports.csv`: an extract of [OurAirports](https://ourairports.com/data/) (public domain), with airports within the polling radius plus 20 nm. Rebuild it with `make airports` after changing the polling area, then commit the diff.
-- Silver reads the file directly for airport matching for now (the Spark containers mount `dbt/seeds/`). From Phase 3, dbt loads it as `reference.airports` and every consumer reads that table.
+- dbt loads it as `reference.airports` and every consumer reads that table, including silver's airport matching.
 
 ## Phases
 
@@ -203,7 +203,7 @@ Each phase is roughly a weekend or two and ends with something that works on its
 
 - [x] Trino connected to the catalog
 - [x] dbt project: gold models, tests and the airports seed
-- [ ] Airports seed as the `reference.airports` table, with dbt tests (unique code, coordinates in range, plausible elevation); silver reads the table instead of the CSV
+- [x] Airports seed as the `reference.airports` table, with dbt tests (unique code, coordinates in range, plausible elevation); silver reads the table instead of the CSV
 - [ ] Airflow DAGs: dbt run, compaction, 3-day retention with snapshot expiry, backfill
 - [ ] Grafana dashboard on the gold tables, through the Trino data source
 

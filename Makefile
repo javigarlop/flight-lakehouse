@@ -2,7 +2,7 @@
 -include .env
 COMPOSE := docker compose -f infra/compose/docker-compose.yml --env-file .env
 
-.PHONY: help install lint lint-sql duplication format test cov diff-cov audit check smoke test-stream test-trino up up-ui down logs setup produce replay airports spark-build stream stream-logs stream-stop trino dbt-build dbt-backfill
+.PHONY: help install lint lint-sql duplication format test cov diff-cov audit check smoke test-stream test-trino up up-ui down logs setup produce replay airports spark-build stream stream-logs stream-stop trino dbt-seed dbt-build dbt-backfill
 
 help: ## Show available targets
 	@grep -E '^[a-z-]+:.*## ' $(firstword $(MAKEFILE_LIST)) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -89,6 +89,9 @@ trino: up ## Start Trino on the stack's Iceberg catalog (about 1.5 GB of RAM)
 
 DBT := uv run --env-file .env dbt --no-version-check
 DBT_DIRS := --project-dir dbt --profiles-dir dbt
+
+dbt-seed: ## Load only the reference tables, such as reference.airports, and test them (needs make trino)
+	$(DBT) build $(DBT_DIRS) --select resource_type:seed
 
 dbt-build: ## Load the seeds, build the gold models and run the dbt tests (needs make trino)
 	$(DBT) build $(DBT_DIRS)

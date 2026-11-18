@@ -20,10 +20,12 @@ make produce   # run the producer in this terminal instead (Ctrl+C to stop)
 make replay    # replay the recorded test data into Kafka
 make airports  # rebuild the airports seed for the polling area (see dbt/seeds/README.md)
 make stream    # run the pipeline in the background: live producer (every 4 min) + Spark bronze and silver jobs
+               # (silver's flights need reference.airports: run make trino && make dbt-seed once)
 make stream-logs  # follow both; make stream-stop stops them
 make test-stream  # Spark tests: bronze kill-and-restart, silver end to end (slow, ~1.5 min)
 make trino     # start Trino on the Iceberg catalog (catalog lakehouse, port 8080)
 make test-trino   # read and write Iceberg tables through Trino
+make dbt-seed     # load and test only the reference tables, such as reference.airports
 make dbt-build    # load reference.airports, build the gold tables and run the dbt tests (needs make trino)
 make dbt-backfill # rebuild every gold bucket silver still holds (3 days)
 make down      # stop the stack (data is kept in Docker volumes)

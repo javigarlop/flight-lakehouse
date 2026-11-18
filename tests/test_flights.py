@@ -1,5 +1,6 @@
 """Flight sessionisation and airport matching, run on a local Spark in batch mode."""
 
+import csv
 import math
 from datetime import datetime, timedelta
 
@@ -16,6 +17,7 @@ from pyspark.sql.types import (  # noqa: E402
     TimestampType,
 )
 
+from flight_lakehouse.config import AIRPORTS_CSV  # noqa: E402
 from flight_lakehouse.streaming import flights  # noqa: E402
 from flight_lakehouse.streaming.flights import Airport  # noqa: E402
 
@@ -35,7 +37,23 @@ POSITIONS_SCHEMA = StructType(
     ]
 )
 T0 = datetime(2026, 11, 1, 12, 0)  # naive means UTC (see the spark fixture)
-AIRPORTS = flights.load_airports()
+
+
+def seed_airports() -> list[Airport]:
+    """The dbt seed, parsed directly, so most tests need no airports table."""
+    with AIRPORTS_CSV.open(newline="") as f:
+        return [
+            Airport(
+                row["airport_code"],
+                float(row["latitude"]),
+                float(row["longitude"]),
+                float(row["elevation_ft"] or 0) * flights.FEET_TO_M,
+            )
+            for row in csv.DictReader(f)
+        ]
+
+
+AIRPORTS = seed_airports()
 BY_CODE = {a.code: a for a in AIRPORTS}
 LEBL, LELL = BY_CODE["LEBL"], BY_CODE["LELL"]
 
@@ -73,6 +91,29 @@ def sessionise(spark, *rows, gap="20 minutes"):
 def test_airports_extract_covers_the_polling_area():
     assert {"LEBL", "LEGE", "LERS", "LELL", "LEDA"} <= BY_CODE.keys()
     assert LEBL.elevation_m == pytest.approx(12 * 0.3048)
+
+
+def test_load_airports_reads_the_table(spark):
+    # The seed's column types, as dbt_project.yml sets them for reference.airports.
+    spark.read.csv(
+        str(AIRPORTS_CSV),
+        header=True,
+        schema="airport_code string, icao_code string, iata_code string, name string, "
+        "type string, latitude double, longitude double, elevation_ft int, "
+        "municipality string, iso_country string",
+    ).createOrReplaceTempView("airports")
+
+    assert flights.load_airports(spark, "airports") == AIRPORTS
+
+
+def test_load_airports_refuses_an_empty_table(spark):
+    spark.sql(
+        "SELECT * FROM VALUES ('LEBL', 41.3, 2.08, 12) "
+        "AS t (airport_code, latitude, longitude, elevation_ft) WHERE false"
+    ).createOrReplaceTempView("no_airports")
+
+    with pytest.raises(ValueError, match="no_airports is empty; load it with make dbt-seed"):
+        flights.load_airports(spark, "no_airports")
 
 
 def test_distance_matches_the_spherical_law_of_cosines(spark):

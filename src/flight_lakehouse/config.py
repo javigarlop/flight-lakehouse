@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 SCHEMAS_DIR = ROOT / "schemas"
 POSITIONS_SCHEMA = SCHEMAS_DIR / "flight_position.v1.avsc"
-# Reference data lives as dbt seeds; the Spark jobs read the same files.
+# Reference data lives as dbt seeds; dbt loads them as tables in `reference`.
 AIRPORTS_CSV = ROOT / "dbt" / "seeds" / "airports.csv"
 
 

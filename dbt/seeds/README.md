@@ -2,8 +2,9 @@
 
 Small, rarely changing reference tables, kept as CSV so changes show up in review.
 `make dbt-build` loads them as tables in the `reference` schema, such as
-`lakehouse.reference.airports`, and tests them (`airports.yml`). The Spark silver job
-still reads the CSV directly: the Spark containers mount this folder at `/app/dbt/seeds`.
+`lakehouse.reference.airports`, and tests them (`airports.yml`); `make dbt-seed` loads
+only the seeds. Every consumer reads the tables, not the CSV files: the Spark silver job
+matches airports from `reference.airports`, and waits on startup until it is loaded.
 
 ## `airports.csv`
 
@@ -26,5 +27,6 @@ Airports around the polling area, used to match each flight's departure and arri
 make airports
 ```
 
-Then review the diff and commit it. The commit date is the extract's date. A restart of
-the silver job picks up the new file, and the next `make dbt-build` reloads the table.
+Then review the diff and commit it. The commit date is the extract's date. Run
+`make dbt-seed` to reload the table, then restart the silver job (it reads the airports
+once, on startup).

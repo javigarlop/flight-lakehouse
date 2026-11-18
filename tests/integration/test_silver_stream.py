@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from flight_lakehouse.config import Settings
+from flight_lakehouse.config import AIRPORTS_CSV, Settings
 from flight_lakehouse.producer.kafka import (
     PositionPublisher,
     ensure_topic,
@@ -44,6 +44,16 @@ def catalog():
     return host_catalog()
 
 
+def create_airports(catalog, table: str) -> None:
+    """The airports seed as an Iceberg table, standing in for the one dbt loads."""
+    from pyarrow import csv
+
+    columns = ["airport_code", "latitude", "longitude", "elevation_ft"]
+    rows = csv.read_csv(AIRPORTS_CSV, convert_options=csv.ConvertOptions(include_columns=columns))
+    catalog.create_namespace_if_not_exists(table.split(".", maxsplit=1)[0])
+    catalog.create_table(table, schema=rows.schema).append(rows)
+
+
 @pytest.fixture
 def pipeline(catalog):
     """A fresh topic plus names for fresh bronze and silver tables and checkpoints."""
@@ -59,7 +69,9 @@ def pipeline(catalog):
         "positions": f"test_silver.positions_{suffix}",
         "rejected": f"test_silver.rejected_{suffix}",
         "flights": f"test_silver.flights_{suffix}",
+        "airports": f"test_silver.airports_{suffix}",
     }
+    create_airports(catalog, tables["airports"])
     yield settings, topic, tables, f"/checkpoints/test-{suffix}"
 
     purge_tables(catalog, *tables.values())
@@ -107,6 +119,7 @@ def silver_args(tables: dict[str, str], checkpoint: str, *extra: str) -> list[st
         f"--positions-table={spark['positions']}",
         f"--rejected-table={spark['rejected']}",
         f"--flights-table={spark['flights']}",
+        f"--airports-table={spark['airports']}",
         f"--checkpoint-dir={checkpoint}",
         *extra,
     )
