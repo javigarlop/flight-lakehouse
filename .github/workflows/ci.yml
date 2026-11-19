@@ -75,3 +75,24 @@ jobs:
         with:
           dockerfile: ${{ matrix.dockerfile }}
           failure-threshold: error
+
+  # Redeploys the stack on the home machine after every green push to main. The runner
+  # there is registered with the `lakehouse` label. Never run pull_request jobs on it:
+  # once the repo is public, a fork's PR could run any code on that machine.
+  deploy:
+    needs: [lint, test, security, dockerfiles]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, lakehouse]
+    concurrency:
+      group: deploy
+      cancel-in-progress: false # never stop a deploy halfway
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          clean: false # keep the ignored .env and data/recordings/ between deploys
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked
+      # Trino and the airports seed first: silver's flights need reference.airports.
+      # The gold models aren't built here; they need silver data, which a first deploy lacks.
+      - run: make trino dbt-seed stream
