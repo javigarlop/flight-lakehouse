@@ -91,7 +91,7 @@ DBT := uv run --env-file .env dbt --no-version-check
 DBT_DIRS := --project-dir dbt --profiles-dir dbt
 
 dbt-seed: ## Load only the reference tables, such as reference.airports, and test them (needs make trino)
-	$(DBT) build $(DBT_DIRS) --select resource_type:seed
+	$(DBT) build $(DBT_DIRS) --select resource_type:seed --indirect-selection cautious
 
 dbt-build: ## Load the seeds, build the gold models and run the dbt tests (needs make trino)
 	$(DBT) build $(DBT_DIRS)
