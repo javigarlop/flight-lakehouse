@@ -1,5 +1,5 @@
 # Local stack: Kafka, Apicurio Registry, SeaweedFS (S3), Polaris (Iceberg REST catalog,
-# with its state in Postgres so tables survive restarts), Trino and Grafana.
+# with its state in Postgres so tables survive restarts), Trino, Grafana and Prometheus.
 # Start with `make up` from the repo root; credentials come from .env.
 
 name: flight-lakehouse
@@ -380,6 +380,47 @@ services:
       start_period: 20s
     restart: unless-stopped
 
+  # Streaming metrics for Grafana's Streaming dashboard: started by `make grafana`.
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    profiles: [dashboard]
+    ports:
+      - "127.0.0.1:${PROMETHEUS_HOST_PORT:-9090}:9090"
+    # A few dozen series: well under 100 MB.
+    mem_limit: 256m
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      # Matches the 3-day Kafka, bronze and silver retention, with room for a week's trends.
+      - --storage.tsdb.retention.time=15d
+    volumes:
+      - ../prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9090/-/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  # Kafka topic offsets for Prometheus, so the dashboard shows what the producer publishes.
+  # Spark doesn't commit offsets to a consumer group, so Spark's lag comes from the jobs'
+  # own metrics instead (src/flight_lakehouse/streaming/metrics.py).
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:v1.9.0
+    profiles: [dashboard]
+    depends_on:
+      kafka:
+        condition: service_healthy
+    mem_limit: 64m
+    command:
+      - --kafka.server=kafka:9092
+      # Its client defaults to an old protocol version, which Kafka 4 no longer speaks.
+      - --kafka.version=3.9.0
+      # Only the pipeline's topics, not the ones the integration tests create.
+      - --topic.filter=^flight\..*
+    restart: unless-stopped
+
   # Optional web UIs: start with `make up-ui`.
 
   kafka-ui:
@@ -412,5 +453,6 @@ volumes:
   grafana-data:
   kafka-data:
   postgres-data:
+  prometheus-data:
   spark-checkpoints:
   seaweedfs-data:

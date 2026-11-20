@@ -205,14 +205,14 @@ Each phase is roughly a weekend or two and ends with something that works on its
 - [x] Trino connected to the catalog
 - [x] dbt project: gold models, tests and the airports seed
 - [x] Airports seed as the `reference.airports` table, with dbt tests (unique code, coordinates in range, plausible elevation); silver reads the table instead of the CSV
-- [ ] Airflow DAGs: dbt run, compaction, 3-day retention with snapshot expiry, backfill
-- [ ] Grafana dashboard on the gold tables, through the Trino data source
+- [x] Airflow DAGs: dbt run, compaction, 3-day retention with snapshot expiry, backfill
+- [x] Grafana dashboard on the gold tables, through the Trino data source
 
 **Done when:** a backfill from bronze reproduces the same gold tables for the retained 3 days, and the dashboard shows live data.
 
 ### Phase 4: Reliability evidence
 
-- [ ] Grafana dashboards: consumer lag, throughput, freshness
+- [x] Grafana dashboards: consumer lag, throughput, freshness
 - [ ] Schema evolution demo: add a field as schema v2 without stopping the pipeline
 - [ ] Benchmark with max-speed replay: events per second, end-to-end latency, query time before and after compaction
 - [ ] Write the method and results in `docs/benchmarks.md`

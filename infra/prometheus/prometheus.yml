@@ -1,0 +1,13 @@
+# Scrapes the streaming metrics every 15 seconds: the Spark jobs' own (per query: rows,
+# batch duration, Kafka lag, event-time freshness) and the Kafka topic offsets.
+# The Spark jobs only run with `make stream`; until then their targets show as down.
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: spark
+    static_configs:
+      - targets: ["spark-bronze:9108", "spark-silver:9108"]
+  - job_name: kafka
+    static_configs:
+      - targets: ["kafka-exporter:9308"]

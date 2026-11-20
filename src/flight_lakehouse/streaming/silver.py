@@ -37,6 +37,7 @@ from pyspark.sql.streaming import StreamingQuery
 
 from flight_lakehouse.streaming.bronze import TABLE as BRONZE_TABLE
 from flight_lakehouse.streaming.flights import AIRPORTS_TABLE, load_airports, sessionise
+from flight_lakehouse.streaming.metrics import serve_metrics
 from flight_lakehouse.streaming.session import CATALOG, build_session
 from flight_lakehouse.streaming.tables import ensure_table
 
@@ -189,6 +190,7 @@ def run(
     session_gap: str,
 ) -> None:
     spark = build_session("silver")
+    serve_metrics(spark)
     wait_for_table(spark, source)
     checked = with_reject_reasons(read_table(spark, source, max_files))
 

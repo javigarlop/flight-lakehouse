@@ -1,0 +1,15 @@
+# Prometheus for the streaming dashboard, loaded on start. No credentials: it is only
+# reachable inside the Compose network and on 127.0.0.1.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    # Fixed, so the dashboards in infra/grafana/ can refer to it.
+    uid: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    editable: false
+    jsonData:
+      # Matches the scrape interval in infra/prometheus/prometheus.yml.
+      timeInterval: 15s

@@ -81,11 +81,12 @@ def option_calls(mock) -> dict[str, str]:
     [(True, {"availableNow": True}), (False, {"processingTime": "5 seconds"})],
 )
 def test_run_reads_kafka_and_writes_iceberg(monkeypatch, tmp_path, once, trigger):
-    session, rows, tables = MagicMock(), MagicMock(), []
+    session, rows, tables, served = MagicMock(), MagicMock(), [], []
     schema = tmp_path / "schema.avsc"
     schema.write_text("{}")
     monkeypatch.setattr(bronze, "SCHEMA_PATH", schema)
     monkeypatch.setattr(bronze, "build_session", lambda _name: session)
+    monkeypatch.setattr(bronze, "serve_metrics", served.append)
     monkeypatch.setattr(bronze, "decode", lambda _kafka, _schema: rows)
     monkeypatch.setattr(
         bronze,
@@ -103,9 +104,11 @@ def test_run_reads_kafka_and_writes_iceberg(monkeypatch, tmp_path, once, trigger
         "failOnDataLoss": "false",
         "maxOffsetsPerTrigger": "100",
     }
+    assert served == [session]
     assert tables == [("lakehouse.bronze.t", "ingested_at")]
     rows.writeStream.format.assert_called_once_with("iceberg")
     assert option_calls(rows) == {"checkpointLocation": "/cp/t", "fanout-enabled": "true"}
+    rows.writeStream.format().queryName.assert_called_once_with("lakehouse.bronze.t")
     trigger_calls = [c for c in rows.mock_calls if c[0].endswith(".trigger")]
     assert [c.kwargs for c in trigger_calls] == [trigger]
     assert any(

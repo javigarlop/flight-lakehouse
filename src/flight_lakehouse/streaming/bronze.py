@@ -20,6 +20,7 @@ from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 from pyspark.sql.avro.functions import from_avro
 
+from flight_lakehouse.streaming.metrics import serve_metrics
 from flight_lakehouse.streaming.session import CATALOG, build_session
 from flight_lakehouse.streaming.tables import ensure_table
 
@@ -63,6 +64,7 @@ def run(
     topic: str, table: str, checkpoint: str, once: bool, trigger_s: int, max_offsets: int
 ) -> None:
     spark = build_session("bronze")
+    serve_metrics(spark)
     kafka = (
         spark.readStream.format("kafka")
         .option("kafka.bootstrap.servers", os.environ.get("KAFKA_BOOTSTRAP", "kafka:9092"))
@@ -78,6 +80,7 @@ def run(
 
     writer = (
         rows.writeStream.format("iceberg")
+        .queryName(table)
         .outputMode("append")
         .option("checkpointLocation", checkpoint)
         .option("fanout-enabled", "true")

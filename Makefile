@@ -112,9 +112,10 @@ airflow: trino spark-build ## Start Airflow: gold every 15 min, daily maintenanc
 	$(COMPOSE) --profile orchestrate up -d --build --wait airflow
 	@echo "Airflow: http://localhost:$(or $(AIRFLOW_HOST_PORT),8090)"
 
-grafana: trino ## Start Grafana on the gold tables, through Trino (about 300 MB of RAM, plus Trino)
-	$(COMPOSE) --profile dashboard up -d --build --wait grafana
-	@echo "Grafana: http://localhost:$(or $(GRAFANA_HOST_PORT),3000)"
+grafana: trino ## Start Grafana, with Prometheus for the streaming metrics (about 450 MB of RAM, plus Trino)
+	$(COMPOSE) --profile dashboard up -d --build --wait prometheus kafka-exporter grafana
+	@echo "Grafana:    http://localhost:$(or $(GRAFANA_HOST_PORT),3000)"
+	@echo "Prometheus: http://localhost:$(or $(PROMETHEUS_HOST_PORT),9090)"
 
 stream-logs: ## Follow the producer and Spark logs
 	$(COMPOSE) --profile stream logs -f producer spark-bronze spark-silver

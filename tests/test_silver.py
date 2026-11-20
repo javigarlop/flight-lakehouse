@@ -282,6 +282,7 @@ def job(spark, monkeypatch):
     tables, started, read, waited = [], [], [], []
     bronze = spark.createDataFrame([], BRONZE_SCHEMA)
     monkeypatch.setattr(silver, "build_session", lambda _name: session)
+    monkeypatch.setattr(silver, "serve_metrics", lambda _spark: None)
     monkeypatch.setattr(
         silver, "wait_for_table", lambda _spark, table, **_kwargs: waited.append(table)
     )

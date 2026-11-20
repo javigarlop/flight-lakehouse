@@ -20,6 +20,9 @@ RUN echo "pass" > /tmp/noop.py \
        done \
     && rm -rf /tmp/ivy /tmp/noop.py \
     && mkdir -p /checkpoints && chown spark:spark /checkpoints
+# The jobs' Prometheus metrics (src/flight_lakehouse/streaming/metrics.py). Keep in step
+# with the version in uv.lock.
+RUN pip3 install --no-cache-dir prometheus-client==0.26.0
 
 USER spark
 ENV PYTHONPATH=/app/src

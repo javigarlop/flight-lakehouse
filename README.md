@@ -31,7 +31,8 @@ make dbt-backfill # rebuild every gold bucket silver still holds (3 days)
 make maintain     # run the Iceberg maintenance once: 3-day retention, compaction, snapshot expiry
 make airflow      # start Airflow (port 8090): gold every 15 min, daily maintenance, backfill on demand
 make test-dags    # check the Airflow DAGs parse
-make grafana      # start Grafana (port 3000): Flights and Pipeline freshness dashboards on gold, through Trino
+make grafana      # start Grafana (port 3000): Flights and Pipeline freshness on gold, through Trino,
+                  # and Streaming (Kafka lag, throughput, freshness) from Prometheus (port 9090)
 make down      # stop the stack (data is kept in Docker volumes)
 ```
 
