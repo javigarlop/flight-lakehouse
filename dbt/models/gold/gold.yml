@@ -1,6 +1,25 @@
 version: 2
 
 models:
+  - name: active_flights
+    description: >
+      Aircraft in the air now, one row per aircraft with its latest position: seen in the
+      last 10 minutes and not on the ground. A view over silver, so always current.
+      flight_id matches the row silver.flights writes once the flight ends.
+    columns:
+      - name: flight_id
+        data_tests: [unique, not_null]
+      - name: icao24
+        data_tests: [unique, not_null]
+      - name: first_seen
+        data_tests: [not_null]
+      - name: duration_s
+        description: Seconds since the flight's first position, so far.
+        data_tests: [not_null, {in_range: {arguments: {min_value: 0, max_value: 43200}}}]
+      - name: age_s
+        description: Seconds since the latest position.
+        data_tests: [not_null, {in_range: {arguments: {min_value: 0, max_value: 600}}}]
+
   - name: airport_traffic_hourly
     description: Arrivals, departures and aircraft on the ground per airport and hour (UTC).
     data_tests:

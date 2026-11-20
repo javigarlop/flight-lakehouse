@@ -120,7 +120,7 @@ def test_remove_orphan_files_counts_what_it_removed():
     assert snapshots.remove_orphan_files(spark, TABLE, now=NOW) == 2
     assert statements(spark) == [
         "CALL lakehouse.system.remove_orphan_files(table => 'silver.flight_positions', "
-        "older_than => TIMESTAMP '2026-11-15 08:30:15Z')"
+        "older_than => TIMESTAMP '2026-11-15 08:30:15Z', prefix_listing => true)"
     ]
 
 

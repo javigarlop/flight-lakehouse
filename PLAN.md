@@ -163,6 +163,7 @@ Schema: [`schemas/flight_position.v1.avsc`](schemas/flight_position.v1.avsc), BA
 - `gold.route_stats_daily`: flights, median duration and duration spread per route
 - `gold.holding_patterns`: flights circling near an airport before landing
 - `gold.pipeline_freshness`: end-to-end latency from `event_time` to gold
+- `gold.active_flights`: aircraft in the air now with their latest position; a view over silver, so it is always current
 
 **Reference data:** small, rarely changing tables kept as dbt seeds in `dbt/seeds/`, with their source documented in [`dbt/seeds/README.md`](dbt/seeds/README.md).
 - `airports.csv`: an extract of [OurAirports](https://ourairports.com/data/) (public domain), with airports within the polling radius plus 20 nm. Rebuild it with `make airports` after changing the polling area, then commit the diff.

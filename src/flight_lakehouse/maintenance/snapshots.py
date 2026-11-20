@@ -57,6 +57,16 @@ def remove_orphan_files(
     if min_age < SAFE_ORPHAN_MIN_AGE:
         raise ValueError(f"min_age {min_age} could delete files of a write in progress")
     older_than = (now or utcnow()) - min_age
-    removed = len(call(spark, "remove_orphan_files", table, older_than=timestamp(older_than)))
+    removed = len(
+        call(
+            spark,
+            "remove_orphan_files",
+            table,
+            older_than=timestamp(older_than),
+            # List files with the table's S3FileIO: the image has no Hadoop S3 filesystem,
+            # so the default Hadoop listing fails with 'No FileSystem for scheme "s3"'.
+            prefix_listing="true",
+        )
+    )
     log.info("Removed %d orphan files of %s older than %s", removed, table, older_than)
     return removed
