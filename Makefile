@@ -1,8 +1,10 @@
 .DEFAULT_GOAL := help
 -include .env
 COMPOSE := docker compose -f infra/compose/docker-compose.yml --env-file .env
+# Keep in step with infra/airflow/Dockerfile.
+AIRFLOW_VERSION := 3.3.2
 
-.PHONY: help install lint lint-sql duplication format test cov diff-cov audit check smoke test-stream test-trino up up-ui down logs setup produce replay airports spark-build stream stream-logs stream-stop trino dbt-seed dbt-build dbt-backfill
+.PHONY: help install lint lint-sql duplication format test cov diff-cov audit check smoke test-stream test-trino up up-ui down logs setup produce replay airports spark-build stream stream-logs stream-stop trino dbt-seed dbt-build dbt-backfill test-dags maintain airflow
 
 help: ## Show available targets
 	@grep -E '^[a-z-]+:.*## ' $(firstword $(MAKEFILE_LIST)) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -49,6 +51,9 @@ test-stream: .env ## Run the Spark streaming tests (slow; needs make up and make
 
 test-trino: .env ## Run the Trino integration tests (needs make trino)
 	uv run --env-file .env pytest -m trino
+
+test-dags: ## Check the Airflow DAGs parse (installs Airflow for this run only)
+	uv run --with apache-airflow==$(AIRFLOW_VERSION) pytest tests/test_dags.py
 
 up: .env ## Start the local stack and wait until it is ready
 	$(COMPOSE) up -d --wait kafka schema-registry seaweedfs polaris
@@ -99,6 +104,14 @@ dbt-build: ## Load the seeds, build the gold models and run the dbt tests (needs
 dbt-backfill: ## Rebuild every gold bucket silver still holds (its 3-day retention)
 	$(DBT) build $(DBT_DIRS) --vars '{lookback_hours: 72}'
 
+maintain: up ## Run the Iceberg maintenance once, without Airflow: retention, compaction, expiry
+	$(COMPOSE) --profile stream run --rm --no-deps spark-bronze /opt/spark/bin/spark-submit \
+		--master=local[2] --driver-memory=1g src/flight_lakehouse/maintenance/run.py
+
+airflow: trino spark-build ## Start Airflow: gold every 15 min, daily maintenance, backfills (about 1-2 GB of RAM)
+	$(COMPOSE) --profile orchestrate up -d --build --wait airflow
+	@echo "Airflow: http://localhost:$(or $(AIRFLOW_HOST_PORT),8090)"
+
 stream-logs: ## Follow the producer and Spark logs
 	$(COMPOSE) --profile stream logs -f producer spark-bronze spark-silver
 
@@ -109,7 +122,7 @@ logs: ## Follow the stack's logs
 	$(COMPOSE) logs -f
 
 down: ## Stop the local stack, including the web UIs, Spark and Trino
-	$(COMPOSE) --profile ui --profile stream --profile query down
+	$(COMPOSE) --profile ui --profile stream --profile query --profile orchestrate down
 
 .env:
 	cp .env.example .env

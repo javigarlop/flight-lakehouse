@@ -3,6 +3,9 @@
 The order matters. Retention and compaction leave files only old snapshots reference;
 expiry then deletes them, and orphan cleanup catches what failed writes left behind.
 Gold has no retention: its hourly and daily aggregates are tiny and kept for good.
+
+Run with spark-submit, like the streaming jobs: Airflow's daily DAG does (dags/lakehouse.py),
+and so does make maintain.
 """
 
 import logging
@@ -18,7 +21,7 @@ from flight_lakehouse.maintenance.snapshots import expire_snapshots, remove_orph
 from flight_lakehouse.maintenance.sql import utcnow
 from flight_lakehouse.streaming import silver
 from flight_lakehouse.streaming.bronze import TABLE as BRONZE_TABLE
-from flight_lakehouse.streaming.session import CATALOG
+from flight_lakehouse.streaming.session import CATALOG, build_session
 
 log = logging.getLogger(__name__)
 
@@ -62,3 +65,17 @@ def maintain(
         remove_orphan_files(spark, table.name, now=now)
         done.append(table.name)
     return done
+
+
+def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    spark = build_session("maintenance")
+    try:
+        done = maintain(spark)
+    finally:
+        spark.stop()
+    log.info("Maintained %d tables: %s", len(done), ", ".join(done))
+
+
+if __name__ == "__main__":
+    main()

@@ -28,6 +28,9 @@ make test-trino   # read and write Iceberg tables through Trino
 make dbt-seed     # load and test only the reference tables, such as reference.airports
 make dbt-build    # load reference.airports, build the gold tables and run the dbt tests (needs make trino)
 make dbt-backfill # rebuild every gold bucket silver still holds (3 days)
+make maintain     # run the Iceberg maintenance once: 3-day retention, compaction, snapshot expiry
+make airflow      # start Airflow (port 8090): gold every 15 min, daily maintenance, backfill on demand
+make test-dags    # check the Airflow DAGs parse
 make down      # stop the stack (data is kept in Docker volumes)
 ```
 

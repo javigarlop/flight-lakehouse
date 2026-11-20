@@ -9,7 +9,7 @@ pytest.importorskip("pyspark")
 
 from pyspark.sql import Row  # noqa: E402
 
-from flight_lakehouse.maintenance import compaction, retention, snapshots, sql  # noqa: E402
+from flight_lakehouse.maintenance import compaction, retention, run, snapshots, sql  # noqa: E402
 from flight_lakehouse.maintenance.run import TABLES, Table, maintain  # noqa: E402
 
 NOW = datetime(2026, 11, 18, 8, 30, 15, tzinfo=UTC)
@@ -170,3 +170,27 @@ def test_maintain_runs_the_steps_in_order_and_skips_missing_tables(monkeypatch):
         ("expire", "gold", NOW),
         ("orphans", "gold", NOW),
     ]
+
+
+def test_main_maintains_every_table_and_stops_the_session(monkeypatch):
+    spark = MagicMock()
+    monkeypatch.setattr(run, "build_session", lambda _name: spark)
+    monkeypatch.setattr(run, "maintain", lambda session: [] if session is spark else None)
+
+    run.main()
+
+    spark.stop.assert_called_once()
+
+
+def test_main_stops_the_session_when_a_step_fails(monkeypatch):
+    spark = MagicMock()
+    monkeypatch.setattr(run, "build_session", lambda _name: spark)
+
+    def fail(_spark):
+        raise RuntimeError("commit conflict")
+
+    monkeypatch.setattr(run, "maintain", fail)
+
+    with pytest.raises(RuntimeError, match="commit conflict"):
+        run.main()
+    spark.stop.assert_called_once()
