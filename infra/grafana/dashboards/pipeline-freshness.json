@@ -137,7 +137,7 @@
           "calcs": [
             "lastNotNull"
           ],
-          "fields": "",
+          "fields": "/^measured_at$/",
           "values": false
         },
         "colorMode": "value",
@@ -239,13 +239,17 @@
           "custom": {
             "lineWidth": 2,
             "fillOpacity": 0,
-            "showPoints": "auto",
+            "showPoints": "always",
             "pointSize": 8,
             "drawStyle": "line",
             "spanNulls": false,
             "axisSoftMin": 0,
             "gradientMode": "none",
-            "barAlignment": -1
+            "barAlignment": -1,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
           },
           "color": {
             "mode": "fixed",
@@ -312,13 +316,17 @@
           "custom": {
             "lineWidth": 2,
             "fillOpacity": 0,
-            "showPoints": "auto",
+            "showPoints": "always",
             "pointSize": 8,
             "drawStyle": "line",
             "spanNulls": false,
             "axisSoftMin": 0,
             "gradientMode": "none",
-            "barAlignment": -1
+            "barAlignment": -1,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
           },
           "color": {
             "mode": "fixed",
@@ -427,13 +435,17 @@
           "custom": {
             "lineWidth": 2,
             "fillOpacity": 0,
-            "showPoints": "auto",
+            "showPoints": "always",
             "pointSize": 8,
             "drawStyle": "line",
             "spanNulls": false,
             "axisSoftMin": 0,
             "gradientMode": "none",
-            "barAlignment": -1
+            "barAlignment": -1,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
           },
           "color": {
             "mode": "fixed",

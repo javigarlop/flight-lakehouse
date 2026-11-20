@@ -267,7 +267,8 @@
                 "value": null
               }
             ]
-          }
+          },
+          "noValue": "No aircraft"
         },
         "overrides": []
       },
@@ -325,7 +326,31 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "aircraft_type"
+              "options": "callsign"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Callsign"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "registration"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Registration"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "type"
             },
             "properties": [
               {
@@ -448,8 +473,8 @@
     },
     {
       "type": "timeseries",
-      "title": "Departures and arrivals per hour",
-      "description": "Flights matched to the selected airports by silver, per hour (UTC). From gold.airport_traffic_hourly, rebuilt every 15 minutes.",
+      "title": "Movements per hour",
+      "description": "Departures and arrivals, stacked, so each bar is the hour's total movements at the selected airports (UTC). Flights are matched to airports by silver. From gold.airport_traffic_hourly, rebuilt every 15 minutes.",
       "targets": [
         {
           "refId": "A",
@@ -474,7 +499,11 @@
             "spanNulls": false,
             "axisSoftMin": 0,
             "gradientMode": "none",
-            "barAlignment": -1
+            "barAlignment": -1,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
           },
           "color": {
             "mode": "fixed",
@@ -572,7 +601,7 @@
             "type": "trino-datasource",
             "uid": "trino"
           },
-          "rawSQL": "SELECT t.airport_code AS airport, a.name, sum(t.departures) AS departures,\n       sum(t.arrivals) AS arrivals, max(t.aircraft_on_ground) AS peak_on_ground\nFROM lakehouse.gold.airport_traffic_hourly AS t\nLEFT JOIN lakehouse.reference.airports AS a ON t.airport_code = a.airport_code\nWHERE $__timeFilter(t.hour_start) AND t.airport_code IN ($airport)\nGROUP BY 1, 2\nORDER BY sum(t.departures) + sum(t.arrivals) DESC",
+          "rawSQL": "SELECT t.airport_code AS airport, a.name, sum(t.departures) AS departures,\n       sum(t.arrivals) AS arrivals\nFROM lakehouse.gold.airport_traffic_hourly AS t\nLEFT JOIN lakehouse.reference.airports AS a ON t.airport_code = a.airport_code\nWHERE $__timeFilter(t.hour_start) AND t.airport_code IN ($airport)\nGROUP BY 1, 2\nORDER BY sum(t.departures) + sum(t.arrivals) DESC",
           "format": 1
         }
       ],
@@ -595,6 +624,10 @@
               {
                 "id": "displayName",
                 "value": "Airport"
+              },
+              {
+                "id": "custom.width",
+                "value": 70
               }
             ]
           },
@@ -607,6 +640,10 @@
               {
                 "id": "displayName",
                 "value": "Name"
+              },
+              {
+                "id": "custom.width",
+                "value": 215
               }
             ]
           },
@@ -619,6 +656,10 @@
               {
                 "id": "displayName",
                 "value": "Departures"
+              },
+              {
+                "id": "custom.width",
+                "value": 95
               }
             ]
           },
@@ -631,18 +672,10 @@
               {
                 "id": "displayName",
                 "value": "Arrivals"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "peak_on_ground"
-            },
-            "properties": [
+              },
               {
-                "id": "displayName",
-                "value": "Peak on ground"
+                "id": "custom.width",
+                "value": 80
               }
             ]
           }
@@ -693,7 +726,11 @@
             "spanNulls": false,
             "axisSoftMin": 0,
             "gradientMode": "none",
-            "barAlignment": -1
+            "barAlignment": -1,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
           },
           "color": {
             "mode": "fixed",

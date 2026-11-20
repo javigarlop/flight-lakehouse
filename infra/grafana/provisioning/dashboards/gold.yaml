@@ -1,6 +1,7 @@
 # Loads the dashboards in infra/grafana/dashboards/ on start and every 30 seconds after.
 # The JSON files are the source: changes saved in the UI are refused, so edit a panel,
-# copy the dashboard's JSON (Export > Export as JSON) into its file and restart nothing.
+# copy the dashboard's JSON (Export > Export as JSON) into its file: Grafana reloads it
+# within 30 seconds, with no restart.
 apiVersion: 1
 
 providers:
