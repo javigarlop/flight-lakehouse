@@ -9,3 +9,8 @@ ENV GF_PATHS_PLUGINS=/opt/grafana/plugins
 USER root
 RUN grafana cli --pluginsDir "${GF_PATHS_PLUGINS}" plugins install trino-datasource "${TRINO_PLUGIN_VERSION}"
 USER grafana
+
+# Grafana reads data sources only on start, and a deploy leaves a running container as it
+# is. Baked in, a changed data source changes the image, so `make grafana` (up --build)
+# recreates the container. The dashboards stay mounted: Grafana reloads those itself.
+COPY provisioning /etc/grafana/provisioning

@@ -369,7 +369,6 @@ services:
       # Only the baked-in Trino plugin: no downloads of Grafana's default extra plugins.
       GF_PLUGINS_PREINSTALL_DISABLED: "true"
     volumes:
-      - ../grafana/provisioning:/etc/grafana/provisioning:ro
       - ../grafana/dashboards:/etc/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
     healthcheck:
