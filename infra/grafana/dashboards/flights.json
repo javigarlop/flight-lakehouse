@@ -1,0 +1,1120 @@
+{
+  "uid": "gold-flights",
+  "title": "Flights",
+  "description": "Traffic around the polling area from the gold tables, read through Trino.",
+  "tags": [
+    "gold"
+  ],
+  "editable": true,
+  "graphTooltip": 1,
+  "timezone": "utc",
+  "refresh": "1m",
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "schemaVersion": 41,
+  "version": 1,
+  "templating": {
+    "list": [
+      {
+        "name": "airport",
+        "label": "Airport",
+        "type": "query",
+        "datasource": {
+          "type": "trino-datasource",
+          "uid": "trino"
+        },
+        "query": {
+          "refId": "TrinoDataSource-QueryVariable",
+          "rawSQL": "SELECT DISTINCT airport_code FROM lakehouse.gold.airport_traffic_hourly ORDER BY 1"
+        },
+        "refresh": 1,
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "sort": 1
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": [
+        "gold"
+      ],
+      "title": "Gold dashboards",
+      "asDropdown": true
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "In the air now",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "type": "geomap",
+      "title": "Aircraft in the air",
+      "description": "Latest position of each aircraft seen in the last 10 minutes and not on the ground (gold.active_flights, read live from silver). Replayed recordings have old event times, so they show none.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "trino-datasource",
+            "uid": "trino"
+          },
+          "rawSQL": "SELECT callsign, registration, aircraft_type, latitude, longitude,\n       baro_altitude, velocity, true_track, duration_s\nFROM lakehouse.gold.active_flights",
+          "format": 1
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#3987e5"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "view": {
+          "id": "coords",
+          "lat": 41.297,
+          "lon": 2.078,
+          "zoom": 7,
+          "allLayers": true
+        },
+        "controls": {
+          "showZoom": true,
+          "mouseWheelZoom": false,
+          "showAttribution": true
+        },
+        "basemap": {
+          "type": "default",
+          "name": "Basemap"
+        },
+        "tooltip": {
+          "mode": "details"
+        },
+        "layers": [
+          {
+            "type": "markers",
+            "name": "Aircraft",
+            "tooltip": true,
+            "location": {
+              "mode": "coords",
+              "latitude": "latitude",
+              "longitude": "longitude"
+            },
+            "config": {
+              "showLegend": false,
+              "style": {
+                "color": {
+                  "fixed": "#3987e5"
+                },
+                "opacity": 0.9,
+                "size": {
+                  "fixed": 8
+                },
+                "symbol": {
+                  "mode": "fixed",
+                  "fixed": "img/icons/marker/plane.svg"
+                },
+                "rotation": {
+                  "field": "true_track",
+                  "mode": "field",
+                  "fixed": 0,
+                  "min": 0,
+                  "max": 360
+                },
+                "symbolAlign": {
+                  "horizontal": "center",
+                  "vertical": "center"
+                },
+                "text": {
+                  "field": "callsign",
+                  "mode": "field",
+                  "fixed": ""
+                },
+                "textConfig": {
+                  "fontSize": 10,
+                  "offsetX": 10,
+                  "offsetY": 0,
+                  "textAlign": "left",
+                  "textBaseline": "middle"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "id": 2,
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 15,
+        "h": 14
+      },
+      "datasource": {
+        "type": "trino-datasource",
+        "uid": "trino"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Aircraft in the air",
+      "description": "Seen in the last 10 minutes and not on the ground.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "trino-datasource",
+            "uid": "trino"
+          },
+          "rawSQL": "SELECT count(*) AS aircraft FROM lakehouse.gold.active_flights",
+          "format": 1
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#3987e5",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "id": 3,
+      "gridPos": {
+        "x": 15,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "trino-datasource",
+        "uid": "trino"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Newest position",
+      "description": "Age of the newest position among active aircraft. Positions arrive with each poll, every 4 minutes.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "trino-datasource",
+            "uid": "trino"
+          },
+          "rawSQL": "SELECT min(age_s) AS age_s FROM lakehouse.gold.active_flights",
+          "format": 1
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#3987e5",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "id": 4,
+      "gridPos": {
+        "x": 19,
+        "y": 1,
+        "w": 5,
+        "h": 4
+      },
+      "datasource": {
+        "type": "trino-datasource",
+        "uid": "trino"
+      }
+    },
+    {
+      "type": "table",
+      "title": "Active flights",
+      "description": "One row per aircraft in the air, longest flight first.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "trino-datasource",
+            "uid": "trino"
+          },
+          "rawSQL": "SELECT callsign, registration, aircraft_type AS type,\n       baro_altitude AS altitude, velocity AS speed, vertical_rate,\n       duration_s, age_s\nFROM lakehouse.gold.active_flights\nORDER BY duration_s DESC",
+          "format": 1
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "aircraft_type"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Type"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "altitude"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Altitude"
+              },
+              {
+                "id": "unit",
+                "value": "lengthm"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "speed"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Speed"
+              },
+              {
+                "id": "unit",
+                "value": "velocityms"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "vertical_rate"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Climb rate"
+              },
+              {
+                "id": "unit",
+                "value": "velocityms"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "duration_s"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "In the air"
+              },
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "age_s"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Last seen"
+              },
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": []
+      },
+      "id": 5,
+      "gridPos": {
+        "x": 15,
+        "y": 5,
+        "w": 9,
+        "h": 10
+      },
+      "datasource": {
+        "type": "trino-datasource",
+        "uid": "trino"
+      }
+    },
+    {
+      "id": 6,
+      "type": "row",
+      "title": "Airport traffic",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Departures and arrivals per hour",
+      "description": "Flights matched to the selected airports by silver, per hour (UTC). From gold.airport_traffic_hourly, rebuilt every 15 minutes.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "trino-datasource",
+            "uid": "trino"
+          },
+          "rawSQL": "SELECT hour_start AS time, sum(departures) AS departures, sum(arrivals) AS arrivals\nFROM lakehouse.gold.airport_traffic_hourly\nWHERE $__timeFilter(hour_start) AND airport_code IN ($airport)\nGROUP BY 1 ORDER BY 1",
+          "format": 1
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 80,
+            "showPoints": "never",
+            "pointSize": 8,
+            "drawStyle": "bars",
+            "spanNulls": false,
+            "axisSoftMin": 0,
+            "gradientMode": "none",
+            "barAlignment": -1
+          },
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#3987e5"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "departures"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3987e5"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "arrivals"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#d95926"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "departures"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Departures"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "arrivals"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Arrivals"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "id": 7,
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 16,
+        "h": 9
+      },
+      "datasource": {
+        "type": "trino-datasource",
+        "uid": "trino"
+      }
+    },
+    {
+      "type": "table",
+      "title": "Totals by airport",
+      "description": "Totals for the time range, busiest airport first.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "trino-datasource",
+            "uid": "trino"
+          },
+          "rawSQL": "SELECT t.airport_code AS airport, a.name, sum(t.departures) AS departures,\n       sum(t.arrivals) AS arrivals, max(t.aircraft_on_ground) AS peak_on_ground\nFROM lakehouse.gold.airport_traffic_hourly AS t\nLEFT JOIN lakehouse.reference.airports AS a ON t.airport_code = a.airport_code\nWHERE $__timeFilter(t.hour_start) AND t.airport_code IN ($airport)\nGROUP BY 1, 2\nORDER BY sum(t.departures) + sum(t.arrivals) DESC",
+          "format": 1
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "airport"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Airport"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "name"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Name"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "departures"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Departures"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "arrivals"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Arrivals"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "peak_on_ground"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Peak on ground"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": []
+      },
+      "id": 8,
+      "gridPos": {
+        "x": 16,
+        "y": 16,
+        "w": 8,
+        "h": 16
+      },
+      "datasource": {
+        "type": "trino-datasource",
+        "uid": "trino"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Aircraft on the ground per hour",
+      "description": "Distinct aircraft reporting on the ground within 5 km of the selected airports, per hour (UTC).",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "trino-datasource",
+            "uid": "trino"
+          },
+          "rawSQL": "SELECT hour_start AS time, sum(aircraft_on_ground) AS on_ground\nFROM lakehouse.gold.airport_traffic_hourly\nWHERE $__timeFilter(hour_start) AND airport_code IN ($airport)\nGROUP BY 1 ORDER BY 1",
+          "format": 1
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "auto",
+            "pointSize": 8,
+            "drawStyle": "line",
+            "spanNulls": false,
+            "axisSoftMin": 0,
+            "gradientMode": "none",
+            "barAlignment": -1
+          },
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#199e70"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "on_ground"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "On the ground"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "id": 9,
+      "gridPos": {
+        "x": 0,
+        "y": 25,
+        "w": 16,
+        "h": 7
+      },
+      "datasource": {
+        "type": "trino-datasource",
+        "uid": "trino"
+      }
+    },
+    {
+      "id": 10,
+      "type": "row",
+      "title": "Routes",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "type": "barchart",
+      "title": "Busiest routes",
+      "description": "Flights per route in the time range, top 10. 'outside' means that end of the route is beyond the polling area.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "trino-datasource",
+            "uid": "trino"
+          },
+          "rawSQL": "SELECT route, sum(flights) AS flights\nFROM lakehouse.gold.route_stats_daily\nWHERE $__dateFilter(flight_date) AND (departure_airport IN ($airport) OR arrival_airport IN ($airport))\nGROUP BY 1 ORDER BY 2 DESC LIMIT 10",
+          "format": 1
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#3987e5"
+          },
+          "min": 0,
+          "custom": {
+            "lineWidth": 0,
+            "fillOpacity": 90,
+            "gradientMode": "none"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "flights"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Flights"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xField": "route",
+        "showValue": "auto",
+        "barWidth": 0.7,
+        "groupWidth": 0.7,
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        },
+        "xTickLabelSpacing": 0
+      },
+      "id": 11,
+      "gridPos": {
+        "x": 0,
+        "y": 33,
+        "w": 12,
+        "h": 10
+      },
+      "datasource": {
+        "type": "trino-datasource",
+        "uid": "trino"
+      }
+    },
+    {
+      "type": "table",
+      "title": "Route durations",
+      "description": "Flights per route and the flight-weighted average of the daily percentiles. Where a route ends 'outside', the duration is the time spent inside the polling area.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "trino-datasource",
+            "uid": "trino"
+          },
+          "rawSQL": "SELECT route, sum(flights) AS flights,\n       sum(p25_duration_s * flights) / sum(flights) AS p25,\n       sum(median_duration_s * flights) / sum(flights) AS median,\n       sum(p75_duration_s * flights) / sum(flights) AS p75\nFROM lakehouse.gold.route_stats_daily\nWHERE $__dateFilter(flight_date) AND (departure_airport IN ($airport) OR arrival_airport IN ($airport))\nGROUP BY 1 ORDER BY 2 DESC",
+          "format": 1
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "route"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Route"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "flights"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Flights"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p25"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "25th pct"
+              },
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "median"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Median"
+              },
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p75"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "75th pct"
+              },
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": []
+      },
+      "id": 12,
+      "gridPos": {
+        "x": 12,
+        "y": 33,
+        "w": 12,
+        "h": 10
+      },
+      "datasource": {
+        "type": "trino-datasource",
+        "uid": "trino"
+      }
+    },
+    {
+      "id": 13,
+      "type": "row",
+      "title": "Holding patterns",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 43,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "type": "stat",
+      "title": "Flights that held",
+      "description": "Flights that circled at least once within 40 km of their arrival airport. Live 4-minute polls are too sparse to see this; replayed full-resolution recordings show it.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "trino-datasource",
+            "uid": "trino"
+          },
+          "rawSQL": "SELECT count(*) AS flights FROM lakehouse.gold.holding_patterns WHERE $__timeFilter(landed_at) AND airport_code IN ($airport)",
+          "format": 1
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#3987e5",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "id": 14,
+      "gridPos": {
+        "x": 0,
+        "y": 44,
+        "w": 5,
+        "h": 8
+      },
+      "datasource": {
+        "type": "trino-datasource",
+        "uid": "trino"
+      }
+    },
+    {
+      "type": "table",
+      "title": "Holding flights",
+      "description": "Most recent landing first.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "trino-datasource",
+            "uid": "trino"
+          },
+          "rawSQL": "SELECT landed_at, callsign, airport_code, laps,\n       date_diff('second', holding_start, holding_end) AS holding_s\nFROM lakehouse.gold.holding_patterns\nWHERE $__timeFilter(landed_at) AND airport_code IN ($airport)\nORDER BY landed_at DESC",
+          "format": 1
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "landed_at"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Landed (UTC)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "callsign"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Callsign"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "airport_code"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Airport"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "laps"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Laps"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "holding_s"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Time holding"
+              },
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": []
+      },
+      "id": 15,
+      "gridPos": {
+        "x": 5,
+        "y": 44,
+        "w": 19,
+        "h": 8
+      },
+      "datasource": {
+        "type": "trino-datasource",
+        "uid": "trino"
+      }
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+# Loads the dashboards in infra/grafana/dashboards/ on start and every 30 seconds after.
+# The JSON files are the source: changes saved in the UI are refused, so edit a panel,
+# copy the dashboard's JSON (Export > Export as JSON) into its file and restart nothing.
+apiVersion: 1
+
+providers:
+  - name: gold
+    folder: Flight lakehouse
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/dashboards

@@ -4,7 +4,7 @@ COMPOSE := docker compose -f infra/compose/docker-compose.yml --env-file .env
 # Keep in step with infra/airflow/Dockerfile.
 AIRFLOW_VERSION := 3.3.2
 
-.PHONY: help install lint lint-sql duplication format test cov diff-cov audit check smoke test-stream test-trino up up-ui down logs setup produce replay airports spark-build stream stream-logs stream-stop trino dbt-seed dbt-build dbt-backfill test-dags maintain airflow
+.PHONY: help install lint lint-sql duplication format test cov diff-cov audit check smoke test-stream test-trino up up-ui down logs setup produce replay airports spark-build stream stream-logs stream-stop trino dbt-seed dbt-build dbt-backfill test-dags maintain airflow grafana
 
 help: ## Show available targets
 	@grep -E '^[a-z-]+:.*## ' $(firstword $(MAKEFILE_LIST)) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -112,6 +112,10 @@ airflow: trino spark-build ## Start Airflow: gold every 15 min, daily maintenanc
 	$(COMPOSE) --profile orchestrate up -d --build --wait airflow
 	@echo "Airflow: http://localhost:$(or $(AIRFLOW_HOST_PORT),8090)"
 
+grafana: trino ## Start Grafana on the gold tables, through Trino (about 300 MB of RAM, plus Trino)
+	$(COMPOSE) --profile dashboard up -d --build --wait grafana
+	@echo "Grafana: http://localhost:$(or $(GRAFANA_HOST_PORT),3000)"
+
 stream-logs: ## Follow the producer and Spark logs
 	$(COMPOSE) --profile stream logs -f producer spark-bronze spark-silver
 
@@ -121,8 +125,8 @@ stream-stop: ## Stop the producer and Spark jobs (the rest of the stack keeps ru
 logs: ## Follow the stack's logs
 	$(COMPOSE) logs -f
 
-down: ## Stop the local stack, including the web UIs, Spark and Trino
-	$(COMPOSE) --profile ui --profile stream --profile query --profile orchestrate down
+down: ## Stop the local stack, including the web UIs, Spark, Trino, Airflow and Grafana
+	$(COMPOSE) --profile ui --profile stream --profile query --profile orchestrate --profile dashboard down
 
 .env:
 	cp .env.example .env

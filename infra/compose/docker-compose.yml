@@ -1,5 +1,5 @@
 # Local stack: Kafka, Apicurio Registry, SeaweedFS (S3), Polaris (Iceberg REST catalog,
-# with its state in Postgres so tables survive restarts) and Trino.
+# with its state in Postgres so tables survive restarts), Trino and Grafana.
 # Start with `make up` from the repo root; credentials come from .env.
 
 name: flight-lakehouse
@@ -349,6 +349,37 @@ services:
       start_period: 60s
     restart: unless-stopped
 
+  # Dashboards on the gold tables, read through Trino: start with `make grafana`.
+  grafana:
+    build: ../grafana
+    image: flight-lakehouse-grafana:dev
+    profiles: [dashboard]
+    ports:
+      - "127.0.0.1:${GRAFANA_HOST_PORT:-3000}:3000"
+    # About 300 MB idle; the rest is headroom for dashboard queries.
+    mem_limit: 768m
+    environment:
+      # No login: the UI is only bound to 127.0.0.1.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      # Only the baked-in Trino plugin: no downloads of Grafana's default extra plugins.
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+    volumes:
+      - ../grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    restart: unless-stopped
+
   # Optional web UIs: start with `make up-ui`.
 
   kafka-ui:
@@ -378,6 +409,7 @@ services:
 
 volumes:
   airflow-logs:
+  grafana-data:
   kafka-data:
   postgres-data:
   spark-checkpoints:

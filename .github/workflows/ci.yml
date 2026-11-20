@@ -69,7 +69,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        dockerfile: [infra/airflow/Dockerfile, infra/producer/Dockerfile, infra/spark/Dockerfile]
+        dockerfile: [infra/airflow/Dockerfile, infra/grafana/Dockerfile, infra/producer/Dockerfile, infra/spark/Dockerfile]
     steps:
       - uses: actions/checkout@v4
       - uses: hadolint/hadolint-action@v3.1.0

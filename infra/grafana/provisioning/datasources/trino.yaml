@@ -1,0 +1,18 @@
+# Trino as Grafana's default data source, loaded on start. The plugin has no default
+# catalog or schema, so queries name tables in full: lakehouse.<namespace>.<table>.
+# Trino has no authentication locally, so there are no credentials: queries run as
+# the session user `grafana`.
+apiVersion: 1
+
+datasources:
+  - name: Trino
+    type: trino-datasource
+    # Fixed, so the dashboards in infra/grafana/ can refer to it.
+    uid: trino
+    access: proxy
+    url: http://trino:8080
+    isDefault: true
+    # Change it here, not in the UI: the UI can't save changes to a provisioned data source.
+    editable: false
+    jsonData:
+      clientTags: grafana
