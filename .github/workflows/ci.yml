@@ -95,5 +95,6 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --locked
       # Trino and the airports seed first: silver's flights need reference.airports.
-      # The gold models aren't built here; they need silver data, which a first deploy lacks.
-      - run: make trino dbt-seed stream
+      # The gold models aren't built here; Airflow builds them every 15 minutes once silver
+      # has data, and runs the nightly Iceberg maintenance.
+      - run: make trino dbt-seed stream airflow
