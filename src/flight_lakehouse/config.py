@@ -39,7 +39,7 @@ class Settings:
             ),
             topic=_env("POSITIONS_TOPIC", "flight.positions.v1"),
             topic_partitions=int(_env("POSITIONS_TOPIC_PARTITIONS", "3")),
-            topic_retention_hours=int(_env("POSITIONS_TOPIC_RETENTION_HOURS", "72")),
+            topic_retention_hours=int(_env("POSITIONS_TOPIC_RETENTION_HOURS", "168")),
             adsblol_url=_env("ADSBLOL_URL", "https://api.adsb.lol"),
             latitude=float(_env("AREA_LATITUDE", "41.297")),
             longitude=float(_env("AREA_LONGITUDE", "2.078")),

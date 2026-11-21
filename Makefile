@@ -101,8 +101,8 @@ dbt-seed: ## Load only the reference tables, such as reference.airports, and tes
 dbt-build: ## Load the seeds, build the gold models and run the dbt tests (needs make trino)
 	$(DBT) build $(DBT_DIRS)
 
-dbt-backfill: ## Rebuild every gold bucket silver still holds (its 3-day retention)
-	$(DBT) build $(DBT_DIRS) --vars '{lookback_hours: 72}'
+dbt-backfill: ## Rebuild every gold bucket silver still holds (its 7-day retention)
+	$(DBT) build $(DBT_DIRS) --vars '{lookback_hours: 168}'
 
 maintain: up ## Run the Iceberg maintenance once, without Airflow: retention, compaction, expiry
 	$(COMPOSE) --profile stream run --rm --no-deps spark-bronze /opt/spark/bin/spark-submit \

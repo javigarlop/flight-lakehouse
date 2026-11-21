@@ -12,7 +12,7 @@ clean-targets: [target, logs]
 
 vars:
   # Hours of silver each incremental run recomputes. Flights reach silver about 35 minutes
-  # after their last position, so a day is plenty. A backfill sets it to 72 (silver's
+  # after their last position, so a day is plenty. A backfill sets it to 168 (silver's
   # retention) to rebuild every bucket silver still holds.
   lookback_hours: 24
 
@@ -22,7 +22,7 @@ models:
       +schema: gold
       +materialized: incremental
       +incremental_strategy: merge
-      # Gold outlives silver's 3-day retention, so a full refresh would lose history.
+      # Gold outlives silver's 7-day retention, so a full refresh would lose history.
       +full_refresh: false
 
 seeds:

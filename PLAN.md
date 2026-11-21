@@ -114,19 +114,19 @@ Kept deliberately small so the project stays easy to run and maintain on a lapto
 
 - **Region:** a 100 nm (about 185 km) radius around Barcelona airport (LEBL, 41.297 N, 2.078 E). It covers Barcelona, Girona and Reus and their approaches.
 - **Polling:** every 4 minutes. adsb.lol allows 500 requests per day (`x-ratelimit-limit: 500;w=86400`), and 4 minutes is 360 requests a day, which leaves margin for restarts and testing. The producer reads the rate-limit headers on every call and backs off when few requests remain.
-- **Retention: 3 days** for the raw and cleaned data.
-  - Kafka: `retention.ms` of 72 hours on `flight.positions.v1`.
-  - Bronze and silver: a daily job deletes rows older than 3 days, then expires snapshots and removes orphan files so the storage is actually freed.
+- **Retention: 7 days** for the raw and cleaned data.
+  - Kafka: `retention.ms` of 168 hours on `flight.positions.v1`.
+  - Bronze and silver: a daily job deletes rows older than 7 days, then expires snapshots and removes orphan files so the storage is actually freed.
   - Gold: kept, because hourly and daily aggregates are tiny.
 
 **Expected volume** (an estimate to check against real numbers in Phase 1; about 50 aircraft per poll were seen on a test call):
 
-| | Per day | Kept (3 days) |
+| | Per day | Kept (7 days) |
 |---|---|---|
-| Polls | 360 | 1,080 |
-| Positions | ~25,000 (~50–150 aircraft per poll) | ~75,000 |
-| Kafka (Avro) | ~3 MB | ~10 MB |
-| Iceberg bronze and silver (Parquet) | ~1 MB | ~3 MB |
+| Polls | 360 | 2,520 |
+| Positions | ~25,000 (~50–150 aircraft per poll) | ~175,000 |
+| Kafka (Avro) | ~3 MB | ~21 MB |
+| Iceberg bronze and silver (Parquet) | ~1 MB | ~7 MB |
 
 **What 4-minute polling means:**
 - Live data gives one position per aircraft every 4 minutes. That is enough for airport traffic and route stats, but too coarse to see the shape of a holding pattern, so `gold.holding_patterns` is built and tested on replayed data from adsb.lol's full-resolution history dumps.
@@ -144,12 +144,12 @@ Schema: [`schemas/flight_position.v1.avsc`](schemas/flight_position.v1.avsc), BA
 
 **Bronze `bronze.flight_positions`**
 - Raw events as received, plus Kafka metadata (`topic`, `partition`, `offset`, `ingested_at`)
-- Append-only, partitioned by ingestion day; rows older than 3 days are deleted
+- Append-only, partitioned by ingestion day; rows older than 7 days are deleted
 
 **Silver `silver.flight_positions`**
 - Deduplicated on (`icao24`, `event_time`), typed and validated
 - Late data handled with a watermark; invalid rows routed to `silver.rejected_positions` with a reason
-- Partitioned by event day; rows older than 3 days are deleted
+- Partitioned by event day; rows older than 7 days are deleted
 
 **Silver `silver.flights`**
 - One row per flight: an aircraft's positions with no gap longer than 20 minutes (Spark session windows). A flight is written once the watermark passes its end, about 35 minutes after its last position
@@ -205,10 +205,10 @@ Each phase is roughly a weekend or two and ends with something that works on its
 - [x] Trino connected to the catalog
 - [x] dbt project: gold models, tests and the airports seed
 - [x] Airports seed as the `reference.airports` table, with dbt tests (unique code, coordinates in range, plausible elevation); silver reads the table instead of the CSV
-- [x] Airflow DAGs: dbt run, compaction, 3-day retention with snapshot expiry, backfill
+- [x] Airflow DAGs: dbt run, compaction, 7-day retention with snapshot expiry, backfill
 - [x] Grafana dashboard on the gold tables, through the Trino data source
 
-**Done when:** a backfill from bronze reproduces the same gold tables for the retained 3 days, and the dashboard shows live data.
+**Done when:** a backfill from bronze reproduces the same gold tables for the retained 7 days, and the dashboard shows live data.
 
 ### Phase 4: Reliability evidence
 

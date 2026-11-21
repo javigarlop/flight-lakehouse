@@ -70,7 +70,7 @@ def run(
         .option("kafka.bootstrap.servers", os.environ.get("KAFKA_BOOTSTRAP", "kafka:9092"))
         .option("subscribe", topic)
         .option("startingOffsets", "earliest")
-        # Kafka deletes messages after 3 days; if the job was down longer, carry on.
+        # Kafka deletes messages after 7 days; if the job was down longer, carry on.
         .option("failOnDataLoss", "false")
         .option("maxOffsetsPerTrigger", str(max_offsets))
         .load()

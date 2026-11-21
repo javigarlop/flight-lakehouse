@@ -20,9 +20,9 @@ DEFAULT_ARGS = {"pool": POOL, "retries": 1, "retry_delay": timedelta(minutes=5)}
 
 # The project, profiles, target and log paths come from the container's DBT_* variables.
 DBT_BUILD = "dbt --no-version-check build --exclude resource_type:seed"
-# Silver keeps 3 to 4 days, so 72 hours is the most a backfill can recompute: an older
+# Silver keeps 7 to 8 days, so 168 hours is the most a backfill can recompute: an older
 # bucket would be rebuilt from partly deleted rows and lose part of its counts.
-MAX_LOOKBACK_HOURS = 72
+MAX_LOOKBACK_HOURS = 168
 
 SPARK_SUBMIT = (
     "$SPARK_HOME/bin/spark-submit --master=local[2] --driver-memory=1g"
@@ -70,7 +70,7 @@ with DAG(
 
 with DAG(
     dag_id="iceberg_maintenance",
-    description="3-day retention, compaction, snapshot expiry and orphan cleanup",
+    description="7-day retention, compaction, snapshot expiry and orphan cleanup",
     schedule="30 3 * * *",  # daily, at a quiet hour for Barcelona traffic
     start_date=START,
     catchup=False,

@@ -1,8 +1,8 @@
-"""Retention: delete bronze and silver rows older than 3 days.
+"""Retention: delete bronze and silver rows older than 7 days.
 
 The cutoff is the start of a UTC day, so a delete drops whole day partitions and
-Iceberg only rewrites metadata. Everything newer than the cutoff stays: between 3 and
-4 days of rows. Deleting frees no storage by itself; expiring the snapshots that still
+Iceberg only rewrites metadata. Everything newer than the cutoff stays: between 7 and
+8 days of rows. Deleting frees no storage by itself; expiring the snapshots that still
 reference the files does (see snapshots.py). Streaming readers skip delete snapshots,
 so the jobs keep running.
 """
@@ -16,7 +16,7 @@ from flight_lakehouse.maintenance.sql import timestamp, utcnow
 
 log = logging.getLogger(__name__)
 
-RETENTION_DAYS = 3
+RETENTION_DAYS = 7
 
 
 def cutoff(now: datetime, days: int) -> datetime:

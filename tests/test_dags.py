@@ -57,7 +57,7 @@ def test_backfill_passes_the_lookback_to_dbt(dagbag):
 
 def test_backfill_cannot_reach_past_silver_retention(dagbag):
     schema = dagbag.dags["gold_backfill"].params.get_param("lookback_hours").schema
-    assert schema["maximum"] == 72
+    assert schema["maximum"] == 168
 
 
 def test_maintenance_submits_the_maintenance_job(dagbag):

@@ -78,10 +78,10 @@ def test_delete_older_than_drops_whole_days():
     spark = session()
     limit = retention.delete_older_than(spark, TABLE, "event_time", now=NOW)
 
-    assert limit == datetime(2026, 11, 15, tzinfo=UTC)
+    assert limit == datetime(2026, 11, 11, tzinfo=UTC)
     assert statements(spark) == [
         "DELETE FROM lakehouse.silver.flight_positions "
-        "WHERE event_time < TIMESTAMP '2026-11-15 00:00:00Z'"
+        "WHERE event_time < TIMESTAMP '2026-11-11 00:00:00Z'"
     ]
 
 

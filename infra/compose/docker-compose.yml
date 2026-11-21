@@ -23,8 +23,8 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_NUM_PARTITIONS: 3
-      # Keep 3 days of events (the plan's retention); Iceberg holds the longer-lived aggregates.
-      KAFKA_LOG_RETENTION_HOURS: 72
+      # Keep 7 days of events (the plan's retention); Iceberg holds the longer-lived aggregates.
+      KAFKA_LOG_RETENTION_HOURS: 168
       # Store data in the named volume (the image defaults to /tmp, lost on recreate).
       KAFKA_LOG_DIRS: /var/lib/kafka/data
     volumes:
@@ -390,7 +390,7 @@ services:
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
-      # Matches the 3-day Kafka, bronze and silver retention, with room for a week's trends.
+      # Covers the 7-day Kafka, bronze and silver retention, with a week more of trends.
       - --storage.tsdb.retention.time=15d
     volumes:
       - ../prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
