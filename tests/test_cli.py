@@ -70,7 +70,7 @@ def test_setup_creates_topic_and_registers_schema(monkeypatch, settings, capsys)
 
     assert main(["setup"]) == 0
 
-    assert topics == [(settings.kafka_bootstrap, settings.topic, 3, 72)]
+    assert topics == [(settings.kafka_bootstrap, settings.topic, 3, 168)]
     assert schemas == [(settings.schema_registry_url, settings.topic)]
     out = capsys.readouterr().out
     assert "created" in out
