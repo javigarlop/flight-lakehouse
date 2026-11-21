@@ -1,7 +1,8 @@
-"""Turn an adsb.lol API response into position records matching flight_position.v1.
+"""Turn an adsb.lol API response into position records matching flight_position.v2.
 
 This is a pure function of the response, so replaying a recording always yields
-the same records.
+the same records. A v1 publisher serialises the same records; Avro then leaves
+out the fields v1 doesn't have.
 """
 
 from typing import Any
@@ -52,6 +53,7 @@ def to_position(aircraft: dict[str, Any], received_at: int) -> dict[str, Any] | 
         "vertical_rate": _scaled(aircraft.get("baro_rate"), FEET_PER_MIN_TO_MS),
         "on_ground": on_ground,
         "squawk": _text(aircraft.get("squawk")),
+        "emergency": _text(aircraft.get("emergency")),
     }
 
 

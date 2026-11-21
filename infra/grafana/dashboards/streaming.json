@@ -14,7 +14,7 @@
     "to": "now"
   },
   "schemaVersion": 41,
-  "version": 1,
+  "version": 2,
   "templating": {
     "list": []
   },
@@ -484,6 +484,139 @@
       }
     },
     {
+      "type": "timeseries",
+      "title": "Rows per second, 1-minute rate",
+      "description": "The same rates over 1 minute instead of 10, in rows per second. Live polling shows as short spikes every 4 minutes; use this panel during a max-speed replay (make benchmark), when Kafka and bronze run flat out.",
+      "id": 13,
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 18,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(kafka_topic_partition_current_offset{topic=\"flight.positions.v1\"}[1m]))",
+          "range": true,
+          "instant": false,
+          "legendFormat": "published to Kafka"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (query) (rate(flight_stream_input_rows_total[1m]))",
+          "range": true,
+          "instant": false,
+          "legendFormat": "{{query}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: rows/s",
+          "decimals": 0,
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "drawStyle": "line",
+            "spanNulls": false,
+            "axisSoftMin": 0,
+            "gradientMode": "none"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Peak bronze rows per second",
+      "description": "The highest 1-minute rate of rows bronze read over the selected time range. Pick the range of a max-speed replay to read its sustained throughput; make benchmark measures it from the tables too.",
+      "id": 14,
+      "gridPos": {
+        "x": 18,
+        "y": 15,
+        "w": 6,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max_over_time(sum(rate(flight_stream_input_rows_total{query=\"lakehouse.bronze.flight_positions\"}[1m]))[$__range:15s])",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: rows/s",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#3987e5",
+                "value": null
+              }
+            ]
+          },
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      }
+    },
+    {
       "type": "row",
       "title": "Freshness and health",
       "id": 9,
@@ -491,7 +624,7 @@
       "panels": [],
       "gridPos": {
         "x": 0,
-        "y": 15,
+        "y": 23,
         "w": 24,
         "h": 1
       }
@@ -503,7 +636,7 @@
       "id": 10,
       "gridPos": {
         "x": 0,
-        "y": 16,
+        "y": 24,
         "w": 8,
         "h": 8
       },
@@ -573,7 +706,7 @@
       "id": 11,
       "gridPos": {
         "x": 8,
-        "y": 16,
+        "y": 24,
         "w": 8,
         "h": 8
       },
@@ -652,7 +785,7 @@
       "id": 12,
       "gridPos": {
         "x": 16,
-        "y": 16,
+        "y": 24,
         "w": 8,
         "h": 8
       },

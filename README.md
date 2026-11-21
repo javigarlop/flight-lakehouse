@@ -33,6 +33,8 @@ make airflow      # start Airflow (port 8090): gold every 15 min, daily maintena
 make test-dags    # check the Airflow DAGs parse
 make grafana      # start Grafana (port 3000): Flights and Pipeline freshness on gold, through Trino,
                   # and Streaming (Kafka lag, throughput, freshness) from Prometheus (port 9090)
+make schema-demo  # publish v1 then v2 events (schema v2 adds emergency) while the pipeline runs (needs make stream)
+make benchmark    # max-speed replay benchmark; writes docs/benchmark-results.{json,md} (see docs/benchmarks.md; 16 GB+ RAM)
 make down      # stop the stack (data is kept in Docker volumes)
 ```
 

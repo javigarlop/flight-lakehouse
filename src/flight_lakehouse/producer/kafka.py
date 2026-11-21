@@ -15,15 +15,29 @@ from confluent_kafka.schema_registry import (
 from confluent_kafka.schema_registry.avro import AvroSerializer
 from confluent_kafka.serialization import MessageField, SerializationContext, StringSerializer
 
-from flight_lakehouse.config import POSITIONS_SCHEMA
+from flight_lakehouse.config import POSITIONS_SCHEMA, schema_versions
 
 # Seconds before a schema registry request gives up and is retried. The client's
 # default is no timeout at all, so one unanswered request blocks the producer forever.
 REGISTRY_TIMEOUT_S = 10
+# How long the publisher trusts its copy of the subject's latest schema. The client
+# caches it forever by default; with a TTL, a running producer moves to a newly
+# registered version (such as v2) within a minute, without a restart.
+LATEST_SCHEMA_TTL_S = 60
+
+
+class IncompatibleSchemaError(RuntimeError):
+    """The registry says the schema breaks the subject's compatibility rule."""
 
 
 def registry_client(registry_url: str) -> SchemaRegistryClient:
-    return SchemaRegistryClient({"url": registry_url, "timeout": REGISTRY_TIMEOUT_S})
+    return SchemaRegistryClient(
+        {
+            "url": registry_url,
+            "timeout": REGISTRY_TIMEOUT_S,
+            "cache.latest.ttl.sec": LATEST_SCHEMA_TTL_S,
+        }
+    )
 
 
 def value_subject(topic: str) -> str:
@@ -33,6 +47,16 @@ def value_subject(topic: str) -> str:
 def load_schema(path: Path = POSITIONS_SCHEMA) -> str:
     # Round-trip through json so the registered text is compact and stable.
     return json.dumps(json.loads(path.read_text()), separators=(",", ":"))
+
+
+def schema_path(version: int | None) -> Path:
+    """The schema file for a version number; None means the latest."""
+    if version is None:
+        return POSITIONS_SCHEMA
+    versions = schema_versions()
+    if version not in versions:
+        raise ValueError(f"no schema v{version}; have {', '.join(f'v{v}' for v in versions)}")
+    return versions[version]
 
 
 def ensure_topic(bootstrap: str, topic: str, partitions: int, retention_hours: int) -> bool:
@@ -55,34 +79,64 @@ def ensure_topic(bootstrap: str, topic: str, partitions: int, retention_hours: i
     return True
 
 
-def register_schema(registry_url: str, topic: str, compatibility: str = "BACKWARD") -> int:
-    """Register the value schema and set its compatibility rule. Returns the schema id."""
+def register_schema(
+    registry_url: str,
+    topic: str,
+    compatibility: str = "BACKWARD",
+    path: Path = POSITIONS_SCHEMA,
+) -> int:
+    """Register the value schema and set its compatibility rule. Returns the schema id.
+
+    When the subject already has versions, the registry first checks the schema
+    against the latest one, so an incompatible change fails here with a clear
+    error and nothing is registered. Registering a version already there is a no-op
+    that returns its id.
+    """
     client = registry_client(registry_url)
     subject = value_subject(topic)
-    schema_id = client.register_schema(subject, Schema(load_schema(), "AVRO"))
+    schema = Schema(load_schema(path), "AVRO")
+    if subject in client.get_subjects() and not client.test_compatibility(subject, schema):
+        raise IncompatibleSchemaError(
+            f"{path.name} is not {compatibility} compatible with the latest {subject} version"
+        )
+    schema_id = client.register_schema(subject, schema)
     client.set_compatibility(subject, compatibility)
     return schema_id
+
+
+def serializer_conf(schema_version: int | None) -> dict[str, Any]:
+    """AvroSerializer settings: follow the latest registered version, or pin one."""
+    return {
+        "auto.register.schemas": False,
+        # Unpinned, records are written with the subject's latest version, re-read every
+        # LATEST_SCHEMA_TTL_S. Pinned, the serializer looks the given schema up instead,
+        # which fails if that version isn't registered.
+        "use.latest.version": schema_version is None,
+        # The subject is always <topic>-value. Without this, the serializer first
+        # asks the registry for "associations", an API Apicurio doesn't implement.
+        "subject.name.strategy": topic_subject_name_strategy,
+    }
 
 
 class PositionPublisher:
     """Publishes position records as Avro, keyed by icao24.
 
-    The serializer uses the schema already registered for the topic rather than
-    registering its own, so `flight-lakehouse setup` must run first.
+    The serializer uses a schema already registered for the topic rather than
+    registering its own, so `flight-lakehouse setup` must run first. By default it
+    writes with the subject's latest version; `schema_version` pins one, as an
+    older producer would (the schema evolution demo publishes v1 and v2 this way).
+    Records carry every field of the newest schema; Avro leaves out those the
+    writer version doesn't have.
     """
 
-    def __init__(self, bootstrap: str, registry_url: str, topic: str):
+    def __init__(
+        self, bootstrap: str, registry_url: str, topic: str, schema_version: int | None = None
+    ):
         self.topic = topic
         self._value = AvroSerializer(
             registry_client(registry_url),
-            load_schema(),
-            conf={
-                "auto.register.schemas": False,
-                "use.latest.version": True,
-                # The subject is always <topic>-value. Without this, the serializer first
-                # asks the registry for "associations", an API Apicurio doesn't implement.
-                "subject.name.strategy": topic_subject_name_strategy,
-            },
+            load_schema(schema_path(schema_version)),
+            conf=serializer_conf(schema_version),
         )
         self._key = StringSerializer("utf_8")
         self._producer = Producer(

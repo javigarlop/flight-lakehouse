@@ -1,7 +1,7 @@
 {
   "uid": "gold-pipeline-freshness",
   "title": "Pipeline freshness",
-  "description": "How far behind real time the gold tables are, from gold.pipeline_freshness.",
+  "description": "How far behind real time the gold tables are, from gold.pipeline_freshness, and which schema versions bronze is receiving.",
   "tags": [
     "gold"
   ],
@@ -14,7 +14,7 @@
     "to": "now"
   },
   "schemaVersion": 41,
-  "version": 1,
+  "version": 2,
   "templating": {
     "list": []
   },
@@ -220,7 +220,7 @@
     {
       "type": "timeseries",
       "title": "Data age at each dbt run",
-      "description": "Age of the newest position in silver, measured at each dbt run.",
+      "description": "Age of the newest position in silver, measured at each dbt run. The dashed lines are the stat's 30-minute and 1-hour thresholds.",
       "targets": [
         {
           "refId": "A",
@@ -249,11 +249,31 @@
             "stacking": {
               "mode": "none",
               "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "dashed"
             }
           },
           "color": {
             "mode": "fixed",
             "fixedColor": "#3987e5"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#0ca30c",
+                "value": null
+              },
+              {
+                "color": "#fab219",
+                "value": 1800
+              },
+              {
+                "color": "#d03b3b",
+                "value": 3600
+              }
+            ]
           }
         },
         "overrides": [
@@ -483,6 +503,115 @@
         "x": 12,
         "y": 13,
         "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "trino-datasource",
+        "uid": "trino"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Positions by schema version",
+      "description": "Bronze rows per hour by the Avro schema version that wrote them, stacked. v1 and v2 share the topic during a schema change (make schema-demo); undecoded rows match no known version and go to silver.rejected_positions. Rows from before bronze recorded versions count as v1.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "trino-datasource",
+            "uid": "trino"
+          },
+          "rawSQL": "SELECT date_trunc('hour', ingested_at) AS time,\n  count_if(icao24 IS NOT NULL AND coalesce(schema_version, 1) = 1) AS v1,\n  count_if(schema_version = 2) AS v2,\n  count_if(icao24 IS NULL) AS undecoded\nFROM lakehouse.bronze.flight_positions\nWHERE $__timeFilter(ingested_at)\nGROUP BY 1 ORDER BY 1",
+          "format": 1
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 80,
+            "showPoints": "never",
+            "pointSize": 8,
+            "drawStyle": "bars",
+            "spanNulls": false,
+            "axisSoftMin": 0,
+            "gradientMode": "none",
+            "barAlignment": -1,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "v1"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3987e5"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "v2"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#0ca30c"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "undecoded"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#d03b3b"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "id": 7,
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 24,
         "h": 8
       },
       "datasource": {

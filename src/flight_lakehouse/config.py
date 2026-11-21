@@ -1,12 +1,31 @@
 """Settings read from the environment, with defaults for the local Compose stack."""
 
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SCHEMAS_DIR = ROOT / "schemas"
-POSITIONS_SCHEMA = SCHEMAS_DIR / "flight_position.v1.avsc"
+SCHEMA_FILE = re.compile(r"^flight_position\.v(\d+)\.avsc$")
+
+
+def schema_versions(directory: Path = SCHEMAS_DIR) -> dict[int, Path]:
+    """The position schema files in `directory`, by version number, oldest first."""
+    found = {}
+    for path in directory.iterdir():
+        match = SCHEMA_FILE.match(path.name)
+        if match:
+            found[int(match.group(1))] = path
+    if not found:
+        raise FileNotFoundError(f"no flight_position.v<N>.avsc schema in {directory}")
+    return dict(sorted(found.items()))
+
+
+# Each version only appends optional fields with defaults, so it stays BACKWARD
+# compatible with the one before (tests/test_schemas.py checks it).
+LATEST_SCHEMA_VERSION = max(schema_versions())
+POSITIONS_SCHEMA = schema_versions()[LATEST_SCHEMA_VERSION]
 # Reference data lives as dbt seeds; dbt loads them as tables in `reference`.
 AIRPORTS_CSV = ROOT / "dbt" / "seeds" / "airports.csv"
 

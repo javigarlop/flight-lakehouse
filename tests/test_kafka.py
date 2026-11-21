@@ -101,7 +101,66 @@ def test_registry_requests_time_out():
     # Without a timeout, one unanswered registry request blocks the producer forever.
     with patch.object(kafka, "SchemaRegistryClient") as cls:
         register_schema("http://registry", "positions")
-    assert cls.call_args.args[0] == {"url": "http://registry", "timeout": kafka.REGISTRY_TIMEOUT_S}
+    assert cls.call_args.args[0] == {
+        "url": "http://registry",
+        "timeout": kafka.REGISTRY_TIMEOUT_S,
+        "cache.latest.ttl.sec": kafka.LATEST_SCHEMA_TTL_S,
+    }
+
+
+def test_register_schema_checks_compatibility_of_an_existing_subject():
+    with patch.object(kafka, "SchemaRegistryClient") as cls:
+        client = cls.return_value
+        client.get_subjects.return_value = ["positions-value"]
+        client.test_compatibility.return_value = True
+        client.register_schema.return_value = 8
+        assert register_schema("http://registry", "positions") == 8
+    subject, schema = client.test_compatibility.call_args.args
+    assert subject == "positions-value"
+    assert schema.schema_str == load_schema()
+
+
+def test_register_schema_refuses_an_incompatible_schema():
+    with patch.object(kafka, "SchemaRegistryClient") as cls:
+        client = cls.return_value
+        client.get_subjects.return_value = ["positions-value"]
+        client.test_compatibility.return_value = False
+        with pytest.raises(kafka.IncompatibleSchemaError, match="not BACKWARD compatible"):
+            register_schema("http://registry", "positions")
+    client.register_schema.assert_not_called()
+
+
+def test_register_schema_registers_a_given_version():
+    with patch.object(kafka, "SchemaRegistryClient") as cls:
+        client = cls.return_value
+        client.get_subjects.return_value = []
+        register_schema("http://registry", "positions", path=kafka.schema_path(1))
+    client.test_compatibility.assert_not_called()  # a new subject has nothing to check against
+    (_subject, schema) = client.register_schema.call_args.args
+    assert json.loads(schema.schema_str)["fields"][-1]["name"] == "squawk"
+
+
+def test_schema_path_defaults_to_the_latest_and_rejects_unknown_versions():
+    assert kafka.schema_path(None) == kafka.POSITIONS_SCHEMA
+    assert kafka.schema_path(1).name == "flight_position.v1.avsc"
+    with pytest.raises(ValueError, match="no schema v99"):
+        kafka.schema_path(99)
+
+
+def test_unpinned_publisher_follows_the_latest_registered_version(producer):
+    PositionPublisher("broker:9092", "http://registry", "positions")
+    schema_str = kafka.AvroSerializer.call_args.args[1]
+    assert schema_str == load_schema()
+    assert kafka.AvroSerializer.call_args.kwargs["conf"]["use.latest.version"] is True
+
+
+def test_pinned_publisher_writes_with_that_version(producer):
+    PositionPublisher("broker:9092", "http://registry", "positions", schema_version=1)
+    schema_str = kafka.AvroSerializer.call_args.args[1]
+    assert schema_str == load_schema(kafka.schema_path(1))
+    conf = kafka.AvroSerializer.call_args.kwargs["conf"]
+    assert conf["use.latest.version"] is False
+    assert conf["auto.register.schemas"] is False
 
 
 def test_publisher_uses_topic_subject_without_registry_lookup(producer):

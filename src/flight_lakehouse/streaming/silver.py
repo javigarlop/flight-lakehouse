@@ -65,12 +65,18 @@ POSITION_COLUMNS = [
     "vertical_rate",
     "on_ground",
     "squawk",
+    "emergency",
     "schema_id",
+    "schema_version",
     "kafka_topic",
     "kafka_partition",
     "kafka_offset",
     "ingested_at",
 ]
+
+# Columns later schema versions added to bronze, with their Spark SQL types. A bronze
+# table (or row) from before them reads them as null.
+EVOLVED_COLUMNS = {"emergency": "string", "schema_version": "int"}
 
 # Plausibility bounds in SI units, wide enough for any civil or military aircraft.
 MIN_ALTITUDE_M = -500.0  # below sea level airports, plus sensor noise
@@ -105,8 +111,29 @@ def rules() -> list[tuple[str, Column]]:
     ]
 
 
+def with_evolved_columns(bronze: DataFrame) -> DataFrame:
+    """Add the EVOLVED_COLUMNS a bronze table from before them lacks, as nulls.
+
+    Bronze adds them when it starts with the new schema; until silver restarts, or if
+    it starts first, it may still see the old table. Rows decoded before bronze
+    recorded versions were all v1, so a decoded row without a version is v1.
+    """
+    for name, type_ in EVOLVED_COLUMNS.items():
+        if name not in bronze.columns:
+            bronze = bronze.withColumn(name, F.lit(None).cast(type_))
+    return bronze.withColumn(
+        "schema_version",
+        F.when(F.col("icao24").isNotNull(), F.coalesce("schema_version", F.lit(1))),
+    )
+
+
 def with_reject_reasons(bronze: DataFrame) -> DataFrame:
-    """Add `reject_reasons`: the reasons that apply to each row, empty when it is valid."""
+    """Add `reject_reasons`: the reasons that apply to each row, empty when it is valid.
+
+    The bronze rows get any EVOLVED_COLUMNS they lack first, so v1-era and v2 rows
+    leave with the same columns.
+    """
+    bronze = with_evolved_columns(bronze)
     # A condition that evaluates to null (a failed decode leaves every field null)
     # gives a null entry, which the filter removes, so only true conditions count.
     reasons = F.array(*(F.when(condition, F.lit(reason)) for reason, condition in rules()))
@@ -200,8 +227,10 @@ def run(
     ]
     queries = []
     for rows, table, day_column in outputs:
-        ensure_table(spark, table, rows.schema, day_column)
-        queries.append(start(rows, table, f"{checkpoint_dir}/{table}", once, trigger_s))
+        columns = ensure_table(spark, table, rows.schema, day_column)
+        queries.append(
+            start(rows.select(*columns), table, f"{checkpoint_dir}/{table}", once, trigger_s)
+        )
 
     wait_for_table(spark, airports_table, created_by="make dbt-seed")
     flights = sessionise(
@@ -210,7 +239,7 @@ def run(
         watermark,
         load_airports(spark, airports_table),
     )
-    ensure_table(spark, flights_table, flights.schema, "first_seen")
+    flights = flights.select(*ensure_table(spark, flights_table, flights.schema, "first_seen"))
     flights_checkpoint = f"{checkpoint_dir}/{flights_table}"
 
     if once:

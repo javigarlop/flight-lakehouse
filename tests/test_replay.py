@@ -1,7 +1,12 @@
 import pytest
 
 from flight_lakehouse.producer.positions import to_positions
-from flight_lakehouse.replay.replay import read_recording, replay
+from flight_lakehouse.replay.replay import (
+    last_response_time,
+    read_recording,
+    replay,
+    shift_to_end_at,
+)
 
 
 def gaps_s(recording) -> list[float]:
@@ -54,3 +59,24 @@ def test_blank_lines_are_skipped(recording, tmp_path):
     padded = tmp_path / "padded.jsonl"
     padded.write_text("\n".join([lines[0], "", "   ", *lines[1:], ""]) + "\n")
     assert list(read_recording(padded)) == list(read_recording(recording))
+
+
+def test_shift_moves_every_time_and_keeps_the_gaps(recording, publisher):
+    end = last_response_time(recording)
+    shift = shift_to_end_at(recording, end + 3_600_000)
+    assert shift == 3_600_000
+    replay(recording, publisher, speed=None, shift_ms=shift)
+    original = [p for r in read_recording(recording) for p in to_positions(r)]
+    assert len(publisher.records) == len(original)
+    for shifted, p in zip(publisher.records, original, strict=True):
+        assert shifted["event_time"] == p["event_time"] + shift
+        assert shifted["received_at"] == p["received_at"] + shift
+        assert shifted["icao24"] == p["icao24"]
+    assert max(p["received_at"] for p in publisher.records) == end + shift
+
+
+def test_last_response_time_of_an_empty_recording_fails(tmp_path):
+    empty = tmp_path / "empty.jsonl"
+    empty.write_text("\n")
+    with pytest.raises(ValueError, match="no responses"):
+        last_response_time(empty)

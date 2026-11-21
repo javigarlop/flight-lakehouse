@@ -4,7 +4,7 @@ COMPOSE := docker compose -f infra/compose/docker-compose.yml --env-file .env
 # Keep in step with infra/airflow/Dockerfile.
 AIRFLOW_VERSION := 3.3.2
 
-.PHONY: help install lint lint-sql duplication format test cov diff-cov audit check smoke test-stream test-trino up up-ui down logs setup produce replay airports spark-build stream stream-logs stream-stop trino dbt-seed dbt-build dbt-backfill test-dags maintain airflow grafana
+.PHONY: help install lint lint-sql duplication format test cov diff-cov audit check smoke test-stream test-trino up up-ui down logs setup produce replay airports spark-build stream stream-logs stream-stop trino dbt-seed dbt-build dbt-backfill test-dags maintain airflow grafana schema-demo benchmark
 
 help: ## Show available targets
 	@grep -E '^[a-z-]+:.*## ' $(firstword $(MAKEFILE_LIST)) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -104,9 +104,33 @@ dbt-build: ## Load the seeds, build the gold models and run the dbt tests (needs
 dbt-backfill: ## Rebuild every gold bucket silver still holds (its 7-day retention)
 	$(DBT) build $(DBT_DIRS) --vars '{lookback_hours: 168}'
 
+MAINTAIN := $(COMPOSE) --profile stream run --rm --no-deps spark-bronze /opt/spark/bin/spark-submit \
+	--master=local[2] --driver-memory=1g src/flight_lakehouse/maintenance/run.py
+
 maintain: up ## Run the Iceberg maintenance once, without Airflow: retention, compaction, expiry
-	$(COMPOSE) --profile stream run --rm --no-deps spark-bronze /opt/spark/bin/spark-submit \
-		--master=local[2] --driver-memory=1g src/flight_lakehouse/maintenance/run.py
+	$(MAINTAIN)
+
+DEMO_RECORDING ?= tests/fixtures/adsblol_bcn_100nm.jsonl
+REPLAY := uv run --env-file .env flight-lakehouse replay $(DEMO_RECORDING) --max --shift-to-now
+
+schema-demo: .env ## Schema evolution on the running pipeline: v1 events, then v2 events, no restart (needs make stream)
+	@echo "1. An old producer publishes v1 events"
+	$(REPLAY) --schema-version 1
+	@echo "2. Register v2; the registry checks it is BACKWARD compatible with v1 first"
+	uv run --env-file .env flight-lakehouse setup --schema-version 2
+	@echo "3. A new producer publishes v2 events, with the emergency field, to the same topic"
+	$(REPLAY) --schema-version 2
+	@echo "Bronze decodes both. Within a minute or two (make trino first), check with:"
+	@echo "  SELECT schema_version, count(*), count(emergency) FROM lakehouse.bronze.flight_positions"
+	@echo "  WHERE ingested_at > current_timestamp - INTERVAL '10' MINUTE GROUP BY 1"
+
+BENCH_RECORDING ?= data/recordings/live.jsonl
+
+benchmark: trino spark-build ## Max-speed replay benchmark: throughput, latency, query time around compaction (16 GB+ RAM)
+	$(COMPOSE) --profile stream stop producer
+	$(COMPOSE) --profile stream up -d spark-bronze spark-silver
+	uv run --env-file .env flight-lakehouse benchmark --recording $(BENCH_RECORDING) \
+		--compact-command "$(MAINTAIN)"
 
 airflow: trino spark-build ## Start Airflow: gold every 15 min, daily maintenance, backfills (about 1-2 GB of RAM)
 	$(COMPOSE) --profile orchestrate up -d --build --wait airflow

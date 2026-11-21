@@ -26,7 +26,8 @@ from flight_lakehouse.streaming import silver  # noqa: E402
 from flight_lakehouse.streaming.flights import Airport  # noqa: E402
 from flight_lakehouse.streaming.tables import ensure_table  # noqa: E402
 
-# The columns bronze.decode produces, in the same order.
+# The columns bronze.decode produced before schema v2, in the same order. Silver adds
+# v2's columns (EVOLVED_COLUMNS) to such rows; the v2 tests below add them here.
 BRONZE_SCHEMA = StructType(
     [
         StructField("icao24", StringType()),
@@ -194,6 +195,7 @@ def test_rejected_positions_keep_bronze_columns(spark):
     assert rejected[0]["rejected_at"] is not None
     assert silver.rejected_positions(rows).columns == [
         *BRONZE_SCHEMA.fieldNames(),
+        *silver.EVOLVED_COLUMNS,  # this bronze schema is from before v2
         "reject_reasons",
         "rejected_at",
     ]
@@ -296,7 +298,9 @@ def job(spark, monkeypatch):
 
     monkeypatch.setattr(silver, "read_table", read_table)
     monkeypatch.setattr(
-        silver, "ensure_table", lambda _spark, table, schema, day: tables.append((table, day))
+        silver,
+        "ensure_table",
+        lambda _spark, table, schema, day: tables.append((table, day)) or schema.fieldNames(),
     )
 
     def start(_rows, table, checkpoint, once, _trigger_s):
@@ -392,7 +396,61 @@ def test_ensure_table_creates_partitioned_iceberg_table(spark):  # noqa: ARG001 
 def test_ensure_table_leaves_an_existing_table(spark):  # noqa: ARG001
     session = MagicMock()
     session.catalog.tableExists.return_value = True
+    session.table.return_value.columns = BRONZE_SCHEMA.fieldNames()
 
-    ensure_table(session, "lakehouse.silver.t", BRONZE_SCHEMA, "event_time")
+    columns = ensure_table(session, "lakehouse.silver.t", BRONZE_SCHEMA, "event_time")
 
     session.createDataFrame.assert_not_called()
+    assert columns == BRONZE_SCHEMA.fieldNames()
+    assert session.sql.call_args_list == [call("CREATE NAMESPACE IF NOT EXISTS lakehouse.silver")]
+
+
+def test_ensure_table_adds_new_columns_last(spark):  # noqa: ARG001
+    session = MagicMock()
+    session.catalog.tableExists.return_value = True
+    old = [f for f in BRONZE_SCHEMA.fieldNames() if f != "squawk"]
+    session.table.return_value.columns = old
+    evolved = StructType(
+        [*BRONZE_SCHEMA.fields, StructField("emergency", StringType())]  # v2's field
+    )
+
+    columns = ensure_table(session, "lakehouse.silver.t", evolved, "event_time")
+
+    assert columns == [*old, "squawk", "emergency"]
+    assert session.sql.call_args_list[1:] == [
+        call("ALTER TABLE lakehouse.silver.t ADD COLUMN `squawk` string"),
+        call("ALTER TABLE lakehouse.silver.t ADD COLUMN `emergency` string"),
+    ]
+
+
+def test_v1_era_bronze_rows_get_the_evolved_columns(spark):
+    row = checked(spark, bronze_row()).first()
+    assert row["emergency"] is None
+    assert row["schema_version"] == 1  # bronze didn't record versions before v2
+
+
+def test_v2_rows_keep_their_version_and_new_field(spark):
+    schema = StructType(
+        [
+            *BRONZE_SCHEMA.fields,
+            StructField("emergency", StringType()),
+            StructField("schema_version", IntegerType()),
+        ]
+    )
+    rows = [
+        {**bronze_row(), "emergency": "general", "schema_version": 2},
+        {**bronze_row(icao24="4d2261"), "emergency": None, "schema_version": 1},
+    ]
+    frame = spark.createDataFrame([tuple(r[f.name] for f in schema) for r in rows], schema)
+
+    valid = silver.valid_positions(silver.with_reject_reasons(frame), "1 minute").collect()
+
+    assert sorted((r["icao24"], r["emergency"], r["schema_version"]) for r in valid) == [
+        ("4d2260", "general", 2),
+        ("4d2261", None, 1),
+    ]
+
+
+def test_undecoded_rows_have_no_version(spark):
+    row = checked(spark, bronze_row(icao24=None)).first()
+    assert row["schema_version"] is None

@@ -805,6 +805,8 @@
       ],
       "fieldConfig": {
         "defaults": {
+          "unit": "short",
+          "decimals": 0,
           "color": {
             "mode": "fixed",
             "fixedColor": "#3987e5"
