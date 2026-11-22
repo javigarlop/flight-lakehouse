@@ -49,10 +49,10 @@ p95: a row waits for the next trigger.
 | `silver_last_hour` | 218.8 | 70.2 | -68% |
 
 The maintenance run (retention, compaction and snapshot expiry on every table) took
-139 s. The raw results of the pipeline run are in
-[`benchmark-results.json`](benchmark-results.json) and
-[`benchmark-results.md`](benchmark-results.md); the first run's are in
-[`benchmark-results-compaction.md`](benchmark-results-compaction.md).
+139 s. The first run's tables are in
+[`benchmark-results-compaction.md`](benchmark-results-compaction.md). `make benchmark`
+writes each run's raw numbers to `docs/benchmark-results.json` and `.md`; the second run's
+stayed on the benchmark machine.
 
 ### Hardware
 
