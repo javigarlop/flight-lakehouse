@@ -4,7 +4,7 @@ COMPOSE := docker compose -f infra/compose/docker-compose.yml --env-file .env
 # Keep in step with infra/airflow/Dockerfile.
 AIRFLOW_VERSION := 3.3.2
 
-.PHONY: help install lint lint-sql duplication format test cov diff-cov audit check smoke test-stream test-trino up up-ui down logs setup produce replay airports spark-build stream stream-logs stream-stop trino dbt-seed dbt-build dbt-backfill test-dags maintain airflow grafana schema-demo benchmark
+.PHONY: help install lint lint-sql duplication format test cov diff-cov audit check smoke test-stream test-trino up up-ui down logs setup produce replay airports spark-build stream stream-logs stream-stop trino dbt-seed dbt-build dbt-backfill test-dags maintain airflow grafana deploy schema-demo benchmark
 
 help: ## Show available targets
 	@grep -E '^[a-z-]+:.*## ' $(firstword $(MAKEFILE_LIST)) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -140,6 +140,10 @@ grafana: trino ## Start Grafana, with Prometheus for the streaming metrics (abou
 	$(COMPOSE) --profile dashboard up -d --build --wait prometheus kafka-exporter grafana
 	@echo "Grafana:    http://localhost:$(or $(GRAFANA_HOST_PORT),3000)"
 	@echo "Prometheus: http://localhost:$(or $(PROMETHEUS_HOST_PORT),9090)"
+
+# Trino and the airports seed first: silver's flights need reference.airports. The gold
+# models aren't built here; Airflow builds them every 15 minutes once silver has data.
+deploy: trino dbt-seed stream airflow grafana ## Start or update the whole pipeline (the home machine runs this on each green main)
 
 stream-logs: ## Follow the producer and Spark logs
 	$(COMPOSE) --profile stream logs -f producer spark-bronze spark-silver

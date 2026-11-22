@@ -35,8 +35,11 @@ make grafana      # start Grafana (port 3000): Flights and Pipeline freshness on
                   # and Streaming (Kafka lag, throughput, freshness) from Prometheus (port 9090)
 make schema-demo  # publish v1 then v2 events (schema v2 adds emergency) while the pipeline runs (needs make stream)
 make benchmark    # max-speed replay benchmark; writes docs/benchmark-results.{json,md} (see docs/benchmarks.md; 16 GB+ RAM)
+make deploy    # start or update the whole pipeline: Trino, seeds, streaming, Airflow, Grafana
 make down      # stop the stack (data is kept in Docker volumes)
 ```
+
+The home machine runs `make deploy` itself after each green push to `main`: see [infra/deploy/](infra/deploy/README.md).
 
 ## Data and attribution
 

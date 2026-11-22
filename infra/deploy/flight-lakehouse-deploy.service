@@ -1,0 +1,16 @@
+# User unit: copy to ~/.config/systemd/user/ (see infra/deploy/README.md).
+[Unit]
+Description=Deploy flight-lakehouse from origin/main when CI is green
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+# The clone to deploy from; change the path if yours lives elsewhere.
+ExecStart=%h/flight-lakehouse/infra/deploy/pull-deploy.sh
+# Optional: GITHUB_TOKEN=... (a read-only token, needed while the repo is private)
+EnvironmentFile=-%h/.config/flight-lakehouse/deploy.env
+# make and uv from the usual user install locations
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+StateDirectory=flight-lakehouse
+TimeoutStartSec=30min
