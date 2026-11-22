@@ -214,8 +214,8 @@ Each phase is roughly a weekend or two and ends with something that works on its
 
 - [x] Grafana dashboards: consumer lag, throughput, freshness
 - [x] Schema evolution demo: add a field as schema v2 without stopping the pipeline (`make schema-demo`; schema v2 adds `emergency`, bronze decodes v1 and v2 side by side and the tables gain the column by Iceberg schema evolution; unit tested and checked against real spark-avro, not yet run on the full stack)
-- [ ] Benchmark with max-speed replay: events per second, end-to-end latency, query time before and after compaction. `make benchmark` and its tests are done; the numbers are pending a run on a machine with 16 GB or more of RAM
-- [ ] Write the method and results in `docs/benchmarks.md` (method written; results pending that run)
+- [x] Benchmark with max-speed replay: events per second, end-to-end latency, query time before and after compaction (`make benchmark`, run on the 16 GB home server on 2026-11-22)
+- [x] Write the method and results in `docs/benchmarks.md`
 
 **Done when:** the README shows real, reproducible numbers and `make benchmark` regenerates them.
 

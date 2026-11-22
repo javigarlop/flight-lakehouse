@@ -6,23 +6,64 @@ estimated by hand.
 
 ## Results
 
-**Pending: run `make benchmark` on a machine with ≥16 GB RAM.**
+Two runs on 2026-11-22, one after the other, on the home server that runs the deployed
+stack. Airflow, Grafana, Prometheus and the web UIs were stopped for both, so the
+benchmark had the machine's memory to itself (about 9.5 GB available, no swapping).
 
-The development laptop has 8 GB of RAM, which can't hold Kafka, Polaris, SeaweedFS,
-both Spark jobs and Trino at once without swapping, and swapping numbers would
-mislead. When the run is done, paste `docs/benchmark-results.md` here, fill in the
-hardware table, and commit `docs/benchmark-results.json` next to it.
+- **Pipeline numbers** come from the second run, with the 5-second trigger
+  (`TRIGGER_SECONDS=5 make benchmark`), so they measure the Spark jobs rather than
+  the 30-second schedule.
+- **Compaction numbers** come from the first run. It found the tables as the live
+  pipeline's small micro-batch writes had left them, 415 data files each; the second
+  run, minutes after that compaction, started from 11 files and shows little.
+
+### Pipeline: max-speed replay of 31,090 positions
+
+| Metric | Value |
+|---|---|
+| Publish rate into Kafka (events/s) | 10,875 |
+| Bronze throughput (events/s) | 7,319 |
+| Silver throughput (events/s) | 3,344 |
+| Rows: bronze / silver | 31,090 / 31,088 |
+| Latency, Kafka to bronze: p50 / p95 / p99 / max (s) | 2.99 / 4.12 / 4.22 / 4.25 |
+| Latency, Kafka to silver: p50 / p95 / p99 / max (s) | 8.04 / 9.17 / 9.27 / 9.30 |
+
+Throughput is rows over the time from the first event entering Kafka to the last row
+written, so it includes the wait for the first trigger and is a lower bound on what
+the jobs can process. Silver reads bronze, so its latency covers both jobs. With the
+default 30-second trigger the first run's bronze latency was 1.4 s at p50 and 30 s at
+p95: a row waits for the next trigger.
+
+### Compaction: Trino query time before and after
+
+| Table | Data files before | After | Change |
+|---|---|---|---|
+| `lakehouse.bronze.flight_positions` | 415 | 4 | -99% |
+| `lakehouse.silver.flight_positions` | 415 | 4 | -99% |
+
+| Query (median of 5 runs after a warm-up) | Before (ms) | After (ms) | Change |
+|---|---|---|---|
+| `silver_count` | 584.9 | 54.2 | -91% |
+| `silver_hourly_positions` | 594.2 | 79.7 | -87% |
+| `silver_busiest_aircraft` | 538.2 | 81.9 | -85% |
+| `silver_last_hour` | 218.8 | 70.2 | -68% |
+
+The maintenance run (retention, compaction and snapshot expiry on every table) took
+139 s. The raw results of the pipeline run are in
+[`benchmark-results.json`](benchmark-results.json) and
+[`benchmark-results.md`](benchmark-results.md); the first run's are in
+[`benchmark-results-compaction.md`](benchmark-results-compaction.md).
 
 ### Hardware
 
 | | |
 |---|---|
-| Machine | _pending_ |
-| CPU | _pending_ |
-| RAM | _pending_ |
-| Disk | _pending_ |
-| OS and Docker | _pending_ |
-| Recording | _pending: file, responses, positions, time span_ |
+| Machine | Lenovo ThinkCentre M720q, single node, everything in Docker Compose |
+| CPU | Intel Core i5-9500T @ 2.20 GHz, 6 cores |
+| RAM | 16 GB (15 GB usable) |
+| Disk | 512 GB NVMe SSD (Samsung PM9A1, MZVL2512HCJQ) |
+| OS and Docker | Ubuntu, Linux 7.0.0-43, Docker 29.10.0 |
+| Recording | `data/recordings/live.jsonl`: live adsb.lol polls around Barcelona, 31,090 positions, squeezed into 5 minutes |
 
 ## Method
 
