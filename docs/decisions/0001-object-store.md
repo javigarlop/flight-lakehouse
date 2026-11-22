@@ -28,7 +28,7 @@ New builds ship only as AIStor, under a proprietary licence. Using MinIO now mea
 Use **SeaweedFS** as the object store, through its S3 API only.
 
 - Pin version **4.42 or later**. Earlier versions could delete committed objects when a parent folder was removed.
-- Keep **Apache Polaris** as the Iceberg catalog, and don't use SeaweedFS's built-in REST catalog. Polaris is engine-neutral, and the catalog is a separate choice (see the planned catalog decision record).
+- Keep **Apache Polaris** as the Iceberg catalog, and don't use SeaweedFS's built-in REST catalog. Polaris is engine-neutral, and the catalog is a separate choice (see [0007](0007-catalog.md)).
 
 ## Consequences
 
