@@ -221,7 +221,7 @@ Each phase is roughly a weekend or two and ends with something that works on its
 
 ### Phase 5: Portfolio polish
 
-- [ ] Before going public, replace the self-hosted runner deploy with a pull-based one (the home machine pulls `main` and redeploys on a schedule), then remove the runner. On a public repo, a fork's PR could run code on the runner's machine (timer and script in [`infra/deploy/`](infra/deploy/README.md); still to do: install them on the machine and remove the runner)
+- [x] Before going public, replace the self-hosted runner deploy with a pull-based one (the home machine pulls `main` and redeploys on a schedule), then remove the runner. On a public repo, a fork's PR could run code on the runner's machine (a systemd timer runs [`infra/deploy/pull-deploy.sh`](infra/deploy/README.md); the runner was removed on 2026-11-22)
 - [ ] Make the repo public (decided: only after Phase 4 is done)
 - [ ] README with the architecture diagram, quick start, dashboard screenshot and benchmark results
 - [ ] Decision records: Spark vs Flink, Iceberg vs Delta, partitioning strategy, catalog choice
