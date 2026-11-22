@@ -237,6 +237,9 @@ services:
       S3_ACCESS_KEY: ${S3_ACCESS_KEY}
       S3_SECRET_KEY: ${S3_SECRET_KEY}
       CHECKPOINT_DIR: /checkpoints
+      # Micro-batch interval of both jobs; `TRIGGER_SECONDS=5 make benchmark` measures
+      # the jobs rather than the schedule.
+      TRIGGER_SECONDS: ${TRIGGER_SECONDS:-30}
     volumes: &spark-volumes
       - ../../src:/app/src:ro
       - ../../schemas:/app/schemas:ro

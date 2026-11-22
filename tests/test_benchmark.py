@@ -162,6 +162,31 @@ def test_run_benchmark_replays_shifted_to_now(benchmark, recording):
     ]
 
 
+def test_run_benchmark_squeezes_the_replay_inside_the_watermark(recording, publisher, tmp_path):
+    # A recording spanning an hour, longer than silver's 15-minute watermark.
+    lines = recording.read_text().splitlines()
+    long = tmp_path / "long.jsonl"
+    responses = [json.loads(line) for line in lines]
+    for i, response in enumerate(responses):
+        response["now"] = responses[0]["now"] + i * 1_800_000
+    long.write_text("\n".join(json.dumps(r) for r in responses) + "\n")
+    expected = sum(len(to_positions(r)) for r in responses)
+    trino = FakeTrino(bronze_rows=expected, silver_rows=expected)
+    offsets = iter([{0: 0}, {0: expected}])
+    services = run.Services(
+        publisher=publisher, end_offsets=lambda: next(offsets), execute=trino, compact=trino.compact
+    )
+    started = datetime(2026, 11, 21, 12, 0, tzinfo=UTC)
+    settings = run.Settings(long, "flight.positions.v1", repeats=1, poll_s=1, stable_polls=1)
+    results = run.run_benchmark(
+        services, settings, clock=FakeClock(), sleep=lambda _s: None, now=lambda: started, env={}
+    )
+    times = [p["received_at"] for p in publisher.records]
+    assert max(times) == int(started.timestamp() * 1000)
+    assert max(times) - min(times) == settings.squeeze_ms
+    assert results["run"]["squeeze_ms"] == settings.squeeze_ms
+
+
 def test_run_benchmark_measures_the_pipeline(benchmark):
     results, _publisher, _trino, expected, _started = benchmark
     pipe = results["pipeline"]

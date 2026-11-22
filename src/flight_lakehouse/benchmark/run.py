@@ -14,8 +14,9 @@ after compaction. `make benchmark` runs it (see docs/benchmarks.md).
 4. Time a fixed set of Trino queries, run the compaction, time them again, and
    count the data files on each side.
 
-The replay shifts the recording's times so its last response is "now": otherwise
-silver's watermark would discard old recorded events as late data.
+The replay squeezes the recording's times into a few minutes and shifts them so its
+last response is "now": otherwise silver's watermark (15 minutes) would discard
+everything but the end of a long recording as late data.
 
 Every live service is passed in, so the logic is unit tested with fakes.
 """
@@ -95,6 +96,9 @@ class Settings:
     poll_s: float = 15
     # Silver triggers every 30 s, so four unchanged polls 15 s apart span two triggers.
     stable_polls: int = 4
+    # Well inside silver's 15-minute watermark, with room for positions' own age
+    # (seen_pos) and the time the replay takes.
+    squeeze_ms: int = 5 * 60_000
 
 
 def _quote(text: str) -> str:
@@ -230,7 +234,13 @@ def run_benchmark(
     before = services.end_offsets()
     log.info("Replaying %s at max speed", settings.recording)
     publish_start = clock()
-    published = replay(settings.recording, services.publisher, speed=None, shift_ms=shift_ms)
+    published = replay(
+        settings.recording,
+        services.publisher,
+        speed=None,
+        shift_ms=shift_ms,
+        squeeze_ms=settings.squeeze_ms,
+    )
     publish_s = clock() - publish_start
     ranges = offset_ranges(before, services.end_offsets())
     in_kafka = sum(r.count for r in ranges)
@@ -265,6 +275,7 @@ def run_benchmark(
             "publish_s": publish_s,
             "publish_rate_eps": rate(published, publish_s),
             "time_shift_ms": shift_ms,
+            "squeeze_ms": settings.squeeze_ms,
             "offsets": [vars(r) for r in ranges],
             "waited_s": waited_s,
         },

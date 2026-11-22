@@ -34,9 +34,12 @@ jobs are running, and starts Trino. Then `flight-lakehouse benchmark`
    replays the recording with the replay tool's max-speed mode (no sleeps between
    responses) and notes the end offsets again. The offsets in between are this
    run's events; every measurement below is filtered to them, so older data in the
-   tables doesn't count. The recording's times are shifted so its last response
-   happens now: silver's 15-minute watermark would otherwise drop old recorded
-   events as late data.
+   tables doesn't count. The recording's times are squeezed into 5 minutes (order
+   and relative gaps kept) and shifted so its last response happens now: silver's
+   15-minute watermark would otherwise drop all but the last few minutes of a long
+   recording as late data. Each position's own time is squeezed the same way, so a
+   position repeated in two responses keeps one `event_time` and silver's
+   deduplication still drops the copy.
 2. **Wait for the pipeline.** It polls Trino until bronze holds every event and
    silver's row count has stayed the same for four polls 15 seconds apart (two
    silver triggers). Silver holds fewer rows than bronze: duplicates of the same
@@ -73,9 +76,12 @@ offsets and the machine) and `docs/benchmark-results.md` (the tables).
   CPU. The numbers describe this single-node setup, not a cluster.
 - Compaction rewrites more than this run's files (it maintains every table), so
   its run time depends on what the tables already hold.
-- Silver's watermark can still drop a few events as late when a long recording is
-  replayed right after another run; the report shows bronze and silver row counts
-  side by side, so that would be visible.
+- Squeezing puts a day of positions into 5 minutes, so `silver.flights` merges each
+  aircraft's replayed positions into one flight, and the live dashboards show the
+  replay as a burst of traffic until retention removes it. The benchmark doesn't
+  measure flights.
+- Silver's watermark can still drop a few events as late; the report shows bronze
+  and silver row counts side by side, so that would be visible.
 
 ## How to run
 
@@ -90,6 +96,10 @@ make trino && make dbt-seed   # silver's flights need reference.airports
 uv run --env-file .env flight-lakehouse produce --no-publish --record data/recordings/live.jsonl --polls 30
 make benchmark         # or: make benchmark BENCH_RECORDING=path/to/recording.jsonl
 ```
+
+`TRIGGER_SECONDS=5 make benchmark` runs both Spark jobs with a 5-second trigger, so
+throughput and latency measure the jobs rather than the 30-second schedule; `make
+stream` afterwards puts them back on 30 seconds.
 
 `make grafana` while it runs shows the replay on the Streaming dashboard: *Rows per
 second, 1-minute rate* and *Peak bronze rows per second* (set the time range to the
