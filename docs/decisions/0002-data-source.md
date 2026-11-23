@@ -26,7 +26,7 @@ The pipeline needs a free, live feed of aircraft positions. Because the repo is 
 
 ## Decision
 
-Use **adsb.lol** as the primary source, scoped to a 100 nm radius around Barcelona airport (LEBL), with 3 days of retention. See the plan's *Scope and retention* section.
+Use **adsb.lol** as the primary source, scoped to a 100 nm radius around Barcelona airport (LEBL), with 7 days of retention (first 3, later extended). See the plan's *Scope and retention* section.
 
 - The producer polls the area every 4 minutes (360 requests a day, under the 500 limit), reads the rate-limit headers, backs off on 429 responses and accepts an optional API key from `.env`.
 - Recordings for `tests/fixtures/` and the replay tool come from the live API or the ODbL history dumps, and are committed with attribution.
@@ -41,11 +41,12 @@ Use **adsb.lol** as the primary source, scoped to a 100 nm radius around Barcelo
 - A single region limits the scale of live data. The benchmark uses max-speed replay instead.
 - If a feeder-only key becomes mandatory, the live producer may need OpenSky or a feeder setup, but replay keeps working.
 
-## To verify before Phase 1
+## Checked in Phase 1
 
-- The current terms and attribution wording on adsb.lol.
-- The maximum query radius, and whether the 500-per-day limit is per IP address.
-- Whether the API key requirement is in effect.
+- The live producer runs without an API key.
+- A 100 nm query radius works, and the API returns `x-ratelimit-limit: 500;w=86400`, so 360 requests a day stays under the limit.
+- The README credits adsb.lol and states the ODbL terms for recorded data and derived tables.
+- Still open: whether the 500-per-day limit is per IP address. It doesn't matter at one producer.
 
 ## References
 
