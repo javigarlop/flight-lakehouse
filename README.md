@@ -4,6 +4,16 @@ A real-time lakehouse for live aircraft positions from open ADS-B feeds: Kafka, 
 
 It polls [adsb.lol](https://adsb.lol) every 4 minutes for aircraft within 100 nm of Barcelona airport, streams the positions through bronze and silver Iceberg tables, builds flights and airport statistics with dbt, and shows them in Grafana. A portfolio and learning project, not a production system: see [PLAN.md](PLAN.md) for the build plan.
 
+![Grafana Flights dashboard: aircraft in the air around Barcelona, movements per hour, totals by airport and route durations](docs/images/grafana-flights.png)
+
+## What it answers
+
+- **How busy is each airport, hour by hour?** Arrivals, departures and aircraft on the ground per hour (`airport_traffic_hourly`).
+- **Which routes carry the most traffic?** Flights and median, p25 and p75 durations per route and day (`route_stats_daily`).
+- **Which flights held before landing?** Flights that circled at least once within 40 km of their arrival airport (`holding_patterns`).
+- **What is in the air right now?** Position, altitude, speed and climb rate of each aircraft (`active_flights`).
+- **Can the numbers be trusted?** How old the data was at each gold build (`pipeline_freshness`).
+
 ## Architecture
 
 ```mermaid
@@ -47,6 +57,18 @@ Measured with `make benchmark` on a single 6-core, 16 GB machine. The method, ha
 
 Reliability is tested, not assumed: the bronze and silver jobs are killed and restarted mid-stream with no lost or duplicated rows, and two replays of the same recording produce identical topic contents.
 
+Grafana also watches the pipeline itself: Kafka lag, rows per minute, micro-batch duration and how fresh each table is.
+
+![Grafana Streaming dashboard: Kafka lag, Spark jobs up, rows per minute and micro-batch duration](docs/images/grafana-streaming.png)
+
+![Grafana Pipeline freshness dashboard: data age at each dbt run, ingest latency and positions per hour](docs/images/grafana-pipeline-freshness.png)
+
+## Limitations
+
+- **Coarse live data.** The live feed is polled every 4 minutes, so each aircraft has one position every 4 minutes. Holding patterns need denser headings than that, so `holding_patterns` is meant for replayed full-resolution recordings.
+- **One end of most routes is outside the area.** Most flights enter or leave the 100 nm circle in cruise, so routes read e.g. `LEBL-outside` and durations are the time spent in the area, not the whole flight.
+- **Local only.** The services run without authentication and bind to `127.0.0.1`: see [SECURITY.md](SECURITY.md).
+
 ## Quick start
 
 Requires Python 3.12, [uv](https://docs.astral.sh/uv/) and Docker. The whole stack needs about 12–16 GB of RAM; Compose profiles start it in parts.
@@ -59,6 +81,8 @@ make deploy    # everything else: Trino, seeds, streaming, Airflow, Grafana
 ```
 
 Then open Grafana at <http://localhost:3000> for the Flights, Pipeline freshness and Streaming dashboards. All ports are bound to `127.0.0.1`. The live producer needs no API key; `make replay` replays the recorded test data instead.
+
+On a smaller machine, `make install && make test` runs the unit tests without Docker, and `make up && make replay` runs the ingestion side on recorded data.
 
 ## All commands
 
