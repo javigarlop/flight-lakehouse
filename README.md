@@ -4,7 +4,7 @@ A real-time lakehouse for live aircraft positions from open ADS-B feeds: Kafka, 
 
 It polls [adsb.lol](https://adsb.lol) every 4 minutes for aircraft within 100 nm of Barcelona airport, streams the positions through bronze and silver Iceberg tables, builds flights and airport statistics with dbt, and shows them in Grafana. A portfolio and learning project, not a production system: see [PLAN.md](PLAN.md) for the build plan.
 
-![Grafana Flights dashboard: aircraft in the air around Barcelona, movements per hour, totals by airport and route durations](docs/images/grafana-flights.png)
+![Grafana Flights dashboard: map of aircraft in the air around Barcelona, movements and aircraft on the ground per hour, totals by airport, busiest routes, route durations and holding patterns](docs/images/grafana-flights.png)
 
 ## What it answers
 
@@ -59,9 +59,9 @@ Reliability is tested, not assumed: the bronze and silver jobs are killed and re
 
 Grafana also watches the pipeline itself: Kafka lag, rows per minute, micro-batch duration and how fresh each table is.
 
-![Grafana Streaming dashboard: Kafka lag, Spark jobs up, rows per minute and micro-batch duration](docs/images/grafana-streaming.png)
+![Grafana Streaming dashboard: Kafka lag, Spark jobs up, rows per minute and per second, event-time freshness and micro-batch duration](docs/images/grafana-streaming.png)
 
-![Grafana Pipeline freshness dashboard: data age at each dbt run, ingest latency and positions per hour](docs/images/grafana-pipeline-freshness.png)
+![Grafana Pipeline freshness dashboard: data age at each dbt run, ingest latency, positions per hour and positions by schema version](docs/images/grafana-pipeline-freshness.png)
 
 ## Limitations
 
